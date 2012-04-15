@@ -1,0 +1,13 @@
+; created by Netengine - www.netengine.com.au
+name = ImageCache Effects
+description = Additional image effects for Image Cache.
+package = ImageCache
+dependencies[] = imagecache
+core = 6.x
+version = 6.x-0.1
+; Information added by drupal.org packaging script on 2009-01-05
+version = "6.x-1.1"
+core = "6.x"
+project = "imagecache_effects"
+datestamp = "1231131919"
+

@@ -1,0 +1,43 @@
+<?php
+function imagecache_effects_theme() {
+  return array(
+    'imagecache_effects_watermark' => array(
+      'arguments' => array('element' => null),
+      'file' => 'imagecache_effects_watermark.inc',
+    ),
+    'imagecache_effects_reflection' => array(
+      'arguments' => array('element' => null),
+      'file' => 'imagecache_effects_reflection.inc',
+    ),
+  );
+}
+
+function imagecache_effects_imagecache_actions() {
+  return array(
+    'imagecache_effects_watermark' => array(
+      'name' => t('Watermark'),
+      'description' => t('Adds an overlay image.'),
+      'module' => 'imagecache_effects',
+      'file' => 'imagecache_effects_watermark.inc',
+      'action' => 'imagecache_effects_watermark',
+      'data' => array(
+        'image_fid' => null,
+        'opacity' => 100,
+        'x' => 0,
+        'y' => 0,
+      ),
+    ),
+    'imagecache_effects_reflection' => array(
+      'name' => t('Reflection'),
+      'description' => t('Add a reflection to the image.'),
+      'module' => 'imagecache_effects',
+      'file' => 'imagecache_effects_reflection.inc',
+      'action' => 'imagecache_effects_reflection',
+      'data' => array(
+        'color' => 'white',
+        'position' => 'bottom',
+        'size' => 30,
+      ),
+    ),
+  );
+}

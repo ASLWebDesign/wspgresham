@@ -1,0 +1,7 @@
+; $Id: imagecache_dropshadow.info, v 0.1, 2009/04/01 20:30:37, skilip Exp $
+name = Imagecachedropshadow
+description = Imagecache Dropshadow
+package = ImageCache
+version = VERSION
+dependencies[] = imagecache
+core = 6.x
