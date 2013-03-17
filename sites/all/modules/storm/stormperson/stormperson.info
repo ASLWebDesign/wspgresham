@@ -1,0 +1,13 @@
+name = Storm Person
+description = "Allows storage of people within organizations, and linking of these to Drupal user accounts."
+dependencies[] = storm
+dependencies[] = stormorganization
+package = Storm
+core = 6.x
+
+; Information added by drupal.org packaging script on 2012-10-15
+version = "6.x-2.1"
+core = "6.x"
+project = "storm"
+datestamp = "1350301325"
+

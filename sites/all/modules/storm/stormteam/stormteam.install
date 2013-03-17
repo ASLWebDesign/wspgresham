@@ -1,0 +1,183 @@
+<?php
+
+/**
+ * @file
+ * Install, uninstall and update functions for the Storm Team module
+ */
+
+/**
+ * @function
+ * Implementation of hook_install().
+ */
+function stormteam_install() {
+  drupal_install_schema('stormteam');
+  variable_set('node_options_stormteam', array('status'));
+}
+
+/**
+ * @function
+ * Implementation of hook_disable().
+ */
+function stormteam_disable() {
+  drupal_set_message(t('Nodes of type "Team" have not been deleted on disabling Storm Team. Please note that they will now have reduced functionality, and will not be protected by Storm Team access controls.'), 'warning');
+}
+
+/**
+ * @function
+ * Implementation of hook_uninstall().
+ */
+function stormteam_uninstall() {
+  drupal_uninstall_schema('stormteam');
+}
+
+/**
+ * @function
+ * Implementation of hook_schema().
+ */
+function stormteam_schema() {
+  $schema['stormteam'] = array(
+    'fields' => array(
+      'vid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'nid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0),
+      'mnid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+    ),
+    'primary key' => array(
+      'vid',
+      'nid',
+      'mnid',
+    ),
+    'indexes'     => array(
+      'vid'  => array('vid'),
+      'nid'  => array('nid'),
+      'mnid' => array('mnid'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * @function
+ * Implementation of hook_update_N().
+ * Removes 0:N from members array
+ */
+function stormteam_update_6101() {
+  $ret = array();
+
+  $sql = "SELECT ste.members, ste.vid FROM {stormteam} ste";
+  $results = db_query($sql);
+  while ($team = db_fetch_object($results)) {
+    $members_array = unserialize($team->members);
+
+    if (array_key_exists(0, $members_array)) {
+      unset($members_array[0]);
+    }
+
+    $team->members = serialize($members_array);
+
+    $sql = "UPDATE {stormteam} SET members='%s' WHERE vid=%d";
+    $result = db_query($sql, $team->members, $team->vid);
+
+    $ret[] = array('success' => $result !== FALSE, 'query' => 'Removed 0:N from vid '. $team->vid);
+  }
+  return $ret;
+}
+
+/**
+ * Implements hook_update_N().
+ *
+ * Migrate members serialized array to member node id
+ */
+function stormteam_update_6200() {
+
+  $ret = array();
+  $new_schema = array();
+  $new_schema['stormteam_6200'] = array(
+    'fields' => array(
+      'vid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'nid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'mnid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+    ),
+    'primary key' => array(
+      'vid',
+      'nid',
+      'mnid',
+    ),
+  );
+
+  // Create the new table with a temporary name
+  db_create_table($ret, 'stormteam_6200', $new_schema['stormteam_6200']);
+
+  // Check for collisions between org names and person names
+  $result = db_query("SELECT * FROM {stormteam}");
+  $mapping = array();
+  while ($team = db_fetch_object($result)) {
+    $members = unserialize($team->members);
+    // Generate the mapping array and save it to the database
+    foreach ($members as $nid => $fullname) {
+      $mapping = new stdClass();
+      $mapping->nid = $team->nid;
+      $mapping->vid = $team->vid;
+      $mapping->mnid = $nid;
+      $result_insert = db_query('INSERT INTO {stormteam_6200} VALUES (%d, %d, %d)', $mapping->vid, $mapping->nid, $mapping->mnid);
+      if (FALSE === $result_insert) {
+        // Write failed, abort the update
+        $mapping = FALSE;
+        break 2;
+      }
+    }
+  }
+
+  if (FALSE === $mapping) {
+    // Abort the changes
+    $ret['#abort'] = array('success' => FALSE, 'query' => "Unable to map team members to nodes. Failed to write data to new table.");
+
+    // Remove the new table
+    db_drop_table($ret, 'stormteam_6200');
+
+    // Return the failed update
+    return $ret;
+  }
+
+  // Remove the old table
+  db_drop_table($ret, 'stormteam');
+
+  // Rename the table to the proper name
+  db_rename_table($ret, 'stormteam_6200', 'stormteam');
+
+  return $ret;
+}
+
+/**
+ * Improve primary keys and indexes
+ */
+function stormteam_update_6201() {
+  $return = array();
+  db_add_index($return, 'stormteam', 'vid', array('vid'));
+  db_add_index($return, 'stormteam', 'nid', array('nid'));
+  db_add_index($return, 'stormteam', 'mnid', array('mnid'));
+  return $return;
+}

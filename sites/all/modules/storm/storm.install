@@ -1,0 +1,129 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the Storm module.
+ */
+
+/**
+ * @function
+ * Install function for the Storm module
+ */
+function storm_install() {
+  variable_set('storm_report_header', '');
+  variable_set('storm_icons_path', drupal_get_path('module', 'storm') .'/icons');
+  variable_set('storm_organization_nid', 0);
+  variable_set('storm_yearsrangebegin', 2001);
+  variable_set('storm_yearsrangeend', 2012);
+
+  drupal_install_schema('storm');
+}
+
+/**
+ * @function
+ * Uninstall function for the Storm module
+ */
+function storm_uninstall() {
+  variable_del('storm_report_header');
+  variable_del('storm_icons_path');
+  variable_del('storm_organization_nid');
+  variable_del('storm_yearsrangebegin');
+  variable_del('storm_yearsrangeend');
+
+  drupal_uninstall_schema('storm');
+}
+
+function storm_schema() {
+  $schema['stormattribute'] = array(
+    'fields'          => array(
+      'aid'           => array('type' => 'serial', 'not null' => TRUE),
+      'domain'        => array('type' => 'varchar', 'length' => 100),
+      'akey'          => array('type' => 'varchar', 'length' => 100),
+      'avalue'        => array('type' => 'varchar', 'length' => 100),
+      'parent_domain' => array('type' => 'varchar', 'length' => 100),
+      'weight'        => array('type' => 'int', 'not null' => FALSE, 'default' => 0, 'size' => 'small'),
+      'isdefault'     => array('type' => 'int', 'not null' => FALSE, 'default' => 0, 'size' => 'tiny'),
+      'isactive'      => array('type' => 'int', 'not null' => FALSE, 'default' => 1, 'size' => 'tiny'),
+    ),
+    'primary key' => array('aid'),
+    'indexes' => array(
+      'domain'        => array('domain'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * @function
+ * Implementation of hook_update_N().
+ * Removes stormteammember table if it exists, cleanup from stormteam transition
+ */
+function storm_update_6101() {
+  $ret = array();
+
+  if (db_table_exists('stormteammember')) {
+    db_drop_table($ret, 'stormteammember');
+  }
+
+  return $ret;
+}
+
+/**
+ * Move Storm Attribute updates into Storm.module
+ */
+function storm_update_6201() {
+  $ret = array();
+
+  // Only run this update if was not previously run as part of the legacy stormattribute module
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 5) {
+    db_add_field($ret, 'stormattribute', 'parent_domain', array('type' => 'varchar', 'length' => 100));
+    db_add_field($ret, 'stormattribute', 'isactive', array('type' => 'int', 'not null' => FALSE, 'default' => 1, 'size' => 'tiny'));
+    db_add_field($ret, 'stormattribute', 'isdefault', array('type' => 'int', 'not null' => FALSE, 'default' => 0, 'size' => 'tiny'));
+  }
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 6) {
+    switch ($GLOBALS['db_type']) {
+      case 'mysql':
+      case 'mysqli':
+        $ret[] = update_sql("ALTER TABLE {stormattribute} CHANGE COLUMN weight weight SMALLINT NOT NULL default 0");
+        break;
+      case 'pgsql':
+        db_change_column($ret, 'stormattribute', "weight", "weight", 'int', array('not null' => FALSE, 'default' => 0, 'size' => 'small'));
+        break;
+    }
+  }
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 6201) {
+    db_add_index($ret, 'stormattribute', 'domain', array('domain'));
+  }
+
+  return $ret;
+}
+
+/**
+ * Set storm contrib dashboard settings to the new storm dashboard settings.
+ */
+function storm_update_6202() {
+  $block_settings_old = variable_get('storm_extension_dashboard_activate_top_navigation', array());
+  $page_settings = variable_get('storm_extension_dashboard_settings', array());
+
+  $block_settings_new = array();
+  if (!empty($page_settings)) {
+    // weight of links was combined before
+    foreach ($page_settings as $link) {
+      $block_settings_new[$link['path']] = array();
+      $block_settings_new[$link['path']]['weight'] = $link['weight'];
+      $block_settings_new[$link['path']]['active'] = $link['active'];
+    }
+    foreach ($block_settings_old as $link) {
+      $block_settings_new[$link['path']]['active'] = $link['active'];
+    }
+  }
+
+  variable_set('storm_pagedashboard_settings', $page_settings);
+  variable_set('storm_blockdashboard_settings', $block_settings_new);
+  variable_del('storm_extension_dashboard_activate_top_navigation');
+  variable_del('storm_extension_dashboard_settings');
+  return array(array('success' => TRUE, 'query' => 'Set storm contrib dashboard settings to the new storm dashboard settings.'));
+}

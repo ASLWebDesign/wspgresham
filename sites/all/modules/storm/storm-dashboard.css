@@ -1,0 +1,32 @@
+/* Creates two columns, each 50% of page width */
+
+#stormdashboard {
+width: 100%
+}
+
+div.stormdashboard {
+float: left;
+width: 50%;
+}
+
+#stormdashboard-block {
+  overflow: hidden;
+}
+
+#stormdashboard-block .stormdashboard-icon {
+  display:inline;
+  float: left
+}
+
+#stormdashboard-block .stormdashboard-icon dt.stormcomponent {
+  height: 32px;
+  padding-top: 5px;
+}
+
+#header-region #stormdashboard-block * {
+  display: inline-block;
+}
+
+#header-region #stormdashboard-block .popups-form img {
+  margin-top: 0;
+}

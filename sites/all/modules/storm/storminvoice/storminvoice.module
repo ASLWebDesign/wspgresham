@@ -1,0 +1,1173 @@
+<?php
+
+/**
+ * @file
+ *
+ * 1: Hooks (help, perm, init, menu, theme, node_info)
+ * 2: Access functions
+ * 3: Load organization and project details
+ * 4: Invoice create / edit form
+ * 5: Invoice node manipulation functions
+ * 6: Admin settings
+ * 7: Auto_add handler
+ * 8: Views hook
+ * 9: Storminvoiceitem legacy functions
+ */
+
+// HOOKS
+function storminvoice_help($path, $arg) {
+  $o = '';
+
+  switch ($path) {
+    case "admin/help#storminvoice":
+      $o = '<p>'. t("Provides invoice support for Storm") .'</p>';
+      break;
+  }
+  return $o;
+}
+
+function storminvoice_perm() {
+  return array(
+    'Storm invoice: access',
+    'Storm invoice: add',
+    'Storm invoice: delete all',
+    'Storm invoice: delete own',
+    'Storm invoice: delete of user organization',
+    'Storm invoice: edit all',
+    'Storm invoice: edit own',
+    'Storm invoice: edit of user organization',
+    'Storm invoice: view all',
+    'Storm invoice: view own',
+    'Storm invoice: view of user organization',
+  );
+}
+
+function storminvoice_init() {
+  $settings = array(
+    'storm' => array(
+      'project_invoices_url' => url('storm/project_invoices_js/')
+    ),
+  );
+  drupal_add_js($settings, 'setting');
+  drupal_add_js(drupal_get_path('module', 'storminvoice') .'/storminvoice.js', 'module', 'header', FALSE);
+}
+
+function storminvoice_menu() {
+  $items = array();
+
+  $items['storm/project_invoices_js/%/%'] = array(
+    'title' => 'Tasks',
+    'page callback' => '_storminvoice_project_invoices_js',
+    'page arguments' => array(2, 3),
+    'access callback' => TRUE,
+    'file' => 'storminvoice.admin.inc',
+    'type' => MENU_CALLBACK,
+    'weight' => 8,
+  );
+
+  $items['storm/invoices'] = array(
+    'title' => 'Invoices',
+    'description' => 'Storm invoices',
+    'page callback' => 'storminvoice_list',
+    'access arguments' => array('Storm invoice: access'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'storminvoice.admin.inc',
+  );
+
+  $items['storm/invoice/auto_add/new/%node'] = array(
+    'page callback' => 'storminvoice_auto_add',
+    'page arguments' => array(4),
+    'access arguments' => array('Storm invoice: add'),
+    'type' => MENU_CALLBACK,
+    'file' => 'storminvoice.auto_add.inc',
+  );
+
+  $items['storm/invoice/auto_add/existing/%'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('storminvoice_auto_add_select'),
+    'access arguments' => array('Storm invoice: add'),
+    'type' => MENU_CALLBACK,
+    'file' => 'storminvoice.auto_add.inc',
+  );
+
+  $items['storm/invoice/report/%node/%/%'] = array(
+    'title' => 'Invoice',
+    'page arguments' => array(3, 4, 5),
+    'description' => 'Storm Invoice',
+    'page callback' => 'storminvoice_report',
+    'access arguments' => array('Storm invoice: access'),
+    'type' => MENU_CALLBACK,
+    'file' => 'storminvoice.admin.inc',
+  );
+
+  $items['storm/invoice/report/%node/email/%'] = array(
+    'title' => 'Send Invoice by Email',
+    'page arguments' => array(3, 5),
+    'description' => 'Storm Invoice',
+    'page callback' => 'storminvoice_send_page',
+    'access arguments' => array('Storm invoice: access'),
+    'type' => MENU_CALLBACK,
+    'file' => 'storminvoice.admin.inc',
+  );
+
+  $items['admin/settings/storm/invoice'] = array(
+    'title' => 'Storm Invoice',
+    'description' => 'Storm Invoice Administration Page',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('storminvoice_admin_settings'),
+    'access arguments' => array('Storm: access administration pages'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+function storminvoice_theme() {
+  return array(
+    'storminvoice_list' => array(
+      'file'      => 'storminvoice.theme.inc',
+      'arguments' => array('header', 'invoices', 'itemsperpage', 'totals_topay', 'totals_paid', 'totals'),
+    ),
+    'storminvoice_view' => array(
+      'file'      => 'storminvoice.theme.inc',
+      'arguments' => array('node', 'teaser', 'page'),
+    ),
+    'storminvoice_report' => array(
+      'file'      => 'storminvoice.theme.inc',
+      'arguments' => array('node', 'report', 'language'),
+    ),
+    'storminvoice_report_html' => array(
+      'file'      => 'storminvoice.theme.inc',
+      'arguments' => array('node', 'language'),
+    ),
+    'storminvoice_report_pdf' => array(
+      'file'      => 'storminvoice.theme.inc',
+      'arguments' => array('node', 'language', array('output' => 'screen')),
+    ),
+    'storminvoice_autoadd_links' => array(
+      'file'      => 'storminvoice.theme.inc',
+      'arguments' => array('nid', 'billable', 'billed'),
+    ),
+  );
+}
+
+function storminvoice_node_info() {
+  return array(
+    'storminvoice' => array(
+      'name' => t('Invoice'),
+      'module' => 'storminvoice',
+      'description' => t("An invoice for Storm."),
+      'title_label' => t("Description"),
+      'has_body' => FALSE,
+    ),
+  );
+}
+
+function storminvoice_content_extra_fields($type_name) {
+  if ($type_name == 'storminvoice') {
+    return array(
+      'group1' => array('label' => 'Number', 'weight' => -20),
+      'group2' => array('label' => 'Organization/Project/Reference Group', 'weight' => -19),
+      'group3' => array('label' => 'Date Group', 'weight' => -18),
+      // Title (description) - weight -17
+      'group4' => array('label' => 'Invoice Items', 'weight' => -16),
+      'group5' => array('label' => 'Price Group', 'weight' => -15),
+    );
+  }
+}
+
+// ACCESS FUNCTIONS
+function storminvoice_access($op, $node, $account=NULL) {
+  if (empty($account)) {
+    global $user;
+    $account = $user;
+  }
+
+  if (is_numeric($node)) {
+    $node = node_load($node);
+  }
+  if ($op == 'create') {
+    return user_access('Storm invoice: add');
+  }
+
+  if ($op == 'delete') {
+    if (user_access('Storm invoice: delete all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm invoice: delete own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm invoice: delete of user organization') && ($account->stormorganization_nid == $node->organization_nid)) {
+      return TRUE;
+    }
+  }
+
+  if ($op == 'update') {
+    if (user_access('Storm invoice: edit all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm invoice: edit own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm invoice: edit of user organization') && ($account->stormorganization_nid == $node->organization_nid)) {
+      return TRUE;
+    }
+  }
+
+  if ($op == 'view') {
+    if (user_access('Storm invoice: view all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm invoice: view own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm invoice: view of user organization') && ($account->stormorganization_nid == $node->organization_nid)) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+function storminvoice_access_sql($sql, $where = array()) {
+  if (user_access('Storm invoice: view all')) {
+    $where[] = "'storm_access'='storm_access'";
+    return storm_rewrite_sql($sql, $where);
+  }
+
+  global $user;
+
+  $cond = '';
+  if (user_access('Storm invoice: view own')) {
+    $cond .= 'n.uid='. $user->uid;
+  }
+  if (user_access('Storm invoice: view of user organization')) {
+    if (!empty($cond)) $cond .= ' OR ';
+    $cond .= 'sin.organization_nid='. $user->stormorganization_nid;
+  }
+  if (empty($cond)) $cond = '0=1';
+  $where[] = $cond;
+
+  $where[] = "'storm_access'='storm_access'";
+  return storm_rewrite_sql($sql, $where);
+}
+
+function storminvoice_storm_rewrite_where_sql($query, $primary_table, $account) {
+  static $conds = array();
+
+  if (isset($conds[$primary_table][$account->uid])) {
+    return $conds[$primary_table][$account->uid];
+  }
+
+  if (preg_match("/'storm_access'='storm_access'/", $query)) {
+    $cond = '';
+  }
+  else {
+    if (user_access('Storm invoice: view all', $account)) {
+      return '';
+    }
+
+    $cond = '';
+    if (user_access('Storm invoice: view own', $account)) {
+      $cond .= "${primary_table}.uid=". $account->uid;
+    }
+    if (user_access('Storm invoice: view of user organization', $account)) {
+      if ($cond) {
+        $cond .= ' OR ';
+      }
+      // If function is called without viewing an organization, this variable may not be set.
+      // These lines check for that and set the organization node id to zero if not otherwise set.
+      if (!isset($account->stormorganization_nid)) {
+        $account->stormorganization_nid = 0;
+      }
+      $cond .= ' sin1.organization_nid='. $account->stormorganization_nid;
+    }
+    if ($cond) {
+      $cond = " WHEN 'storminvoice' THEN (SELECT IF($cond,1,0) FROM {storminvoice} sin1 WHERE sin1.vid=${primary_table}.vid) ";
+    }
+    else {
+      $cond = " WHEN 'storminvoice' THEN 0 ";
+    }
+  }
+
+  $conds[$primary_table][$account->uid] = $cond;
+  return $cond;
+}
+
+// IMPLEMENT STORM HOOKS - ACCOUNT FOR CHANGES IN OTHER STORM NODES
+function storminvoice_stormorganization_change($organization_nid, $organization_title) {
+  $s = "UPDATE {storminvoice} SET organization_title='%s' WHERE organization_nid=%d AND organization_title <> '%s'";
+  db_query($s, $organization_title, $organization_nid, $organization_title);
+}
+
+function storminvoice_stormproject_change($project_nid, $project_title) {
+  $s = "UPDATE {storminvoice} SET project_title='%s' WHERE project_nid=%d AND project_title <> '%s'";
+  db_query($s, $project_title, $project_nid, $project_title);
+}
+
+function storminvoice_stormproject_change_hierarchy($project_nid, $organization_nid, $organization_title) {
+  $s = "UPDATE {storminvoice} SET organization_nid=%d, organization_title='%s' WHERE project_nid=%d";
+  db_query($s, $organization_nid, $organization_title, $project_nid);
+}
+
+// INVOICE CREATE/EDIT FORM
+function storminvoice_form(&$node) {
+  $breadcrumb = array();
+  $breadcrumb[] = l(t('Storm'), 'storm');
+  $breadcrumb[] = l(t('Invoices'), 'storm/invoices');
+  drupal_set_breadcrumb($breadcrumb);
+
+  if (arg(1)=='add') {
+    $node->requestdate = time();
+    $node->duedate = $node->requestdate + (variable_get('storminvoice_payment_days', 30) * 86400);
+    $node->number = storminvoice_get_invoice_number($node->requestdate);
+    $node->paymentdate = NULL;
+
+    if (array_key_exists('organization_nid', $_GET) && !$node->organization_nid) {
+      $node->organization_nid = $_GET['organization_nid'];
+    }
+    if (array_key_exists('project_nid', $_GET) && !$node->project_nid) {
+      $node->project_nid = $_GET['project_nid'];
+      $p = node_load($node->project_nid);
+      $node->organization_nid = $p->organization_nid;
+      if (!stormorganization_access('view', $node->organization_nid)) {
+        drupal_set_message(t("You cannot add an invoice for this project, as you do not have access to view the organization's profile"));
+        drupal_goto('node/'. $node->project_nid);
+      }
+    }
+
+    if (isset($_SESSION['storminvoice_list_filter']['organization_nid']) && !$node->organization_nid) {
+      $node->organization_nid = $_SESSION['storminvoice_list_filter']['organization_nid'];
+    }
+    if (isset($_SESSION['storminvoice_list_filter']['project_nid']) && !$node->project_nid) {
+      $node->project_nid = $_SESSION['storminvoice_list_filter']['project_nid'];
+    }
+    $s_org = "SELECT n.nid, n.title FROM {stormorganization} so INNER JOIN {node} n
+      ON so.nid=n.nid WHERE n.status=1 AND so.isactive=1 AND n.type='stormorganization' ORDER BY n.title";
+  }
+  else {
+    $s_org = "SELECT n.nid, n.title FROM {stormorganization} so INNER JOIN {node} n
+      ON so.nid=n.nid WHERE n.status=1 AND n.type='stormorganization' ORDER BY n.title";
+  }
+
+  $type = node_get_types('type', $node);
+
+  $form['#attributes']['class'] = 'stormcomponent_node_form';
+
+  $form['group1'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group1') : -20,
+  );
+
+  $form['group1']['number'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Number'),
+    '#required' => TRUE,
+    '#size' => 10,
+    '#default_value' => $node->number,
+  );
+
+  $form['title'] = array(
+    '#type' => 'textfield',
+    '#title' => check_plain($type->title_label),
+    '#required' => TRUE,
+    '#default_value' => $node->title,
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'title') : -17,
+  );
+
+  $form['group2'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group2') : -19,
+  );
+
+  $s_org = stormorganization_access_sql($s_org);
+  $s_org = db_rewrite_sql($s_org);
+  $r = db_query($s_org);
+  $organizations = array();
+  while ($organization = db_fetch_object($r)) {
+    $organizations[$organization->nid] = $organization->title;
+    if (!isset($node->organization_nid)) $node->organization_nid = $organization->nid;
+  }
+  $form['group2']['organization_nid'] = array(
+    '#type' => 'select',
+    '#title' => t('Organization'),
+    '#default_value' => $node->organization_nid,
+    '#options' => $organizations,
+    '#required' => TRUE,
+    '#attributes' => array('onchange' => "stormproject_organization_projects(this, 'edit-project-nid', true, '-')"),
+  );
+
+  $s = "SELECT n.nid, n.title FROM {node} AS n INNER JOIN {stormproject} AS spr ON spr.vid=n.vid WHERE spr.organization_nid=%d AND n.status=1 AND n.type='stormproject' ORDER BY n.title";
+  $s = stormproject_access_sql($s);
+  $s = db_rewrite_sql($s);
+  $r = db_query($s, $node->organization_nid);
+  $projects = array();
+  while ($project = db_fetch_object($r)) {
+    $projects[$project->nid] = $project->title;
+  }
+  $projects = array(0 => '-') + $projects;
+  $form['group2']['project_nid'] = array(
+    '#type' => 'select',
+    '#title' => t('Project'),
+    '#default_value' => isset($node->project_nid) ? $node->project_nid : NULL,
+    '#options' => $projects,
+    '#process' => array('storm_dependent_select_process'),
+  );
+
+  $form['group2']['reference'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Reference'),
+    '#default_value' => isset($node->reference) ? $node->reference : NULL,
+    '#size' => 40,
+  );
+
+  $form['group3'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group3') : -18,
+  );
+
+  $form['group3']['requestdate'] = array(
+    '#type' => 'dateext',
+    '#withnull' => 'true',
+    '#title' => t('Request date'),
+    '#default_value' => $node->requestdate,
+  );
+
+  $form['group3']['duedate'] = array(
+    '#type' => 'dateext',
+    '#withnull' => 'true',
+    '#title' => t('Due date'),
+    '#default_value' => $node->duedate,
+  );
+
+  $form['group3']['paymentdate'] = array(
+    '#type' => 'dateext',
+    '#withnull' => 'true',
+    '#title' => t('Payment date'),
+    '#default_value' => $node->paymentdate,
+  );
+
+  $form['group4'] = array(
+    '#type' => 'markup',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group4') : -16,
+  );
+
+  $count = (isset($node->items)) ? count($node->items) : 0;
+  for ($k = $count; $k <= $count + 2; $k++) {
+    $node->items[$k] = new stdClass();
+    $node->items[$k]->tax1app = variable_get('storm_tax1_app', 1);
+    $node->items[$k]->tax1percent = variable_get('storm_tax1_percent', 20);
+    $node->items[$k]->tax2app = variable_get('storm_tax2_app', 0);
+    $node->items[$k]->tax2percent = variable_get('storm_tax2_percent', 20);
+    $node->items[$k]->new_item = TRUE;
+  }
+
+  $i = 0;
+  foreach ($node->items as $item) {
+    $form['group4'][$i] = array(
+      '#type' => 'fieldset',
+      '#title' => isset($node->items[$i]->new_item) ? 'New item' : 'Item '. ($i + 1),
+      '#collapsible' => TRUE,
+      '#collapsed' => isset($node->items[$i]->new_item) ? TRUE : FALSE,
+      '#weight' => $i,
+    );
+
+    $form['group4'][$i]['first'] = array(
+      '#type' => 'markup',
+      '#theme' => 'storm_form_group',
+      '#weight' => 1,
+    );
+
+    $form['group4'][$i]['first']['items_'. $i .'_description'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Item description',
+      '#default_value' => isset($node->items[$i]->description) ? $node->items[$i]->description : NULL,
+      '#size' => 80,
+    );
+
+
+    $form['group4'][$i]['first']['items_'. $i .'_amount'] = array(
+      '#type' => 'textfield',
+      '#withnull' => 'true',
+      '#title' => t('Amount'),
+      '#size' => 15,
+      '#default_value' => isset($node->items[$i]->amount) ? $node->items[$i]->amount : NULL,
+    );
+
+    $form['group4'][$i]['first']['items_'. $i .'_weight'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Weight'),
+      '#size' => 3,
+      '#maxlength' => 3,
+      '#default_value' => isset($node->items[$i]->weight) ? $node->items[$i]->weight : NULL,
+    );
+
+    $form['group4'][$i]['tax1'] = array(
+      '#type' => 'markup',
+      '#theme' => 'storm_form_group',
+      '#weight' => 2,
+    );
+
+    $form['group4'][$i]['tax1']['items_'. $i .'_tax1app'] = array(
+      '#type' => 'select',
+      '#title' => t('@tax1 Application', array('@tax1' => variable_get('storm_tax1_name', 'Tax 1'))),
+      '#options' => array(
+        1 => t('Apply to item amount'),
+        0 => t('Do not apply tax'),
+      ),
+      '#default_value' => $node->items[$i]->tax1app,
+    );
+
+    $form['group4'][$i]['tax1']['items_'. $i .'_tax1percent'] = array(
+      '#type' => 'textfield',
+      '#title' => t('@tax1 Percentage', array('@tax1' => variable_get('storm_tax1_name', 'Tax 1'))),
+      '#default_value' => $node->items[$i]->tax1percent,
+      '#size' => 20,
+    );
+
+    $form['group4'][$i]['tax2'] = array(
+      '#type' => 'markup',
+      '#theme' => 'storm_form_group',
+      '#weight' => 3,
+    );
+
+    $form['group4'][$i]['tax2']['items_'. $i .'_tax2app'] = array(
+      '#type' => 'select',
+      '#title' => t('@tax2 Application', array('@tax2' => variable_get('storm_tax2_name', 'Tax 2'))),
+      '#options' => array(
+        2 => t('Apply to total of item amount plus previous tax'),
+        1 => t('Apply to item amount'),
+        0 => t('Do not apply tax'),
+      ),
+      '#default_value' => $node->items[$i]->tax2app,
+    );
+
+    $form['group4'][$i]['tax2']['items_'. $i .'_tax2percent'] = array(
+      '#type' => 'textfield',
+      '#title' => t('@tax2 Percentage', array('@tax2' => variable_get('storm_tax2_name', 'Tax 2'))),
+      '#default_value' => $node->items[$i]->tax2percent,
+      '#size' => 20,
+    );
+
+    $form['group4'][$i]['first']['items_'. $i .'_src_nid'] = array(
+      '#type' => 'hidden',
+      '#default_value' => isset($node->items[$i]->src_nid) ? $node->items[$i]->src_nid : NULL,
+    );
+
+    $form['group4'][$i]['first']['items_'. $i .'_src_vid'] = array(
+      '#type' => 'hidden',
+      '#default_value' => isset($node->items[$i]->src_vid) ? $node->items[$i]->src_vid : NULL,
+    );
+
+    if (!variable_get('storm_tax_display', TRUE)) {
+      $form['group4'][$i]['tax1']['#type'] = 'hidden';
+      $form['group4'][$i]['tax2']['#type'] = 'hidden';
+    }
+    if (!variable_get('storm_tax2_display', TRUE)) {
+      $form['group4'][$i]['tax2']['#type'] = 'hidden';
+    }
+
+    $form['group4'][$i]['items_'. $i .'_total'] = array(
+      '#type' => 'hidden',
+      '#default_value' => isset($node->items[$i]->total) ? $node->items[$i]->total : NULL,
+    );
+
+    $i++;
+  } // foreach
+
+  $form['group5'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group5') : -15,
+  );
+
+  $form['group5']['amount'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Amount'),
+    /* '#attributes' => array('readonly' => 'readonly'), */ // See #450778
+    '#size' => 15,
+    '#default_value' => isset($node->amount) ? $node->amount : NULL,
+  );
+
+  $form['group5']['tax1'] = array(
+    '#type' => 'textfield',
+    '#title' => variable_get('storm_tax1_name', 'Tax 1'),
+    /* '#attributes' => array('readonly' => 'readonly'), */ // See #450778
+    '#size' => 15,
+    '#default_value' => isset($node->tax1) ? $node->tax1 : NULL,
+  );
+
+  $form['group5']['tax2'] = array(
+    '#type' => 'textfield',
+    '#title' => variable_get('storm_tax2_name', 'Tax 2'),
+    /* '#attributes' => array('readonly' => 'readonly'), */ // See #450778
+    '#size' => 15,
+    '#default_value' => isset($node->tax2) ? $node->tax2 : NULL,
+  );
+
+  $form['group5']['total'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Total'),
+    /* '#attributes' => array('readonly' => 'readonly'), */ // See #450778
+    '#size' => 15,
+    '#default_value' => isset($node->total) ? $node->total : NULL,
+  );
+
+  if (!variable_get('storm_tax_display', TRUE)) {
+    $form['group5']['tax1']['#type'] = 'hidden';
+    $form['group5']['tax2']['#type'] = 'hidden';
+    $form['group5']['total']['#type'] = 'hidden';
+  }
+
+  if (!variable_get('storm_tax2_display', TRUE)) {
+    $form['group5']['tax2']['#type'] = 'hidden';
+  }
+
+  $form['group5']['totalcustomercurr'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Total in customer currency'),
+    '#size' => 15,
+    '#default_value' => isset($node->totalcustomercurr) ? $node->totalcustomercurr : NULL,
+  );
+
+  return $form;
+}
+
+// INVOICE NODE MANIPULATION FUNCTIONS
+function storminvoice_insert($node) {
+  _storminvoice_beforesave($node);
+
+  $node->taxexempt = (isset($node->taxexempt)) ? $node->taxexempt : NULL;
+  $node->src_nid = (isset($node->src_nid)) ? $node->src_nid : NULL;
+  $node->src_vid = (isset($node->src_vid)) ? $node->src_vid : NULL;
+
+  db_query("INSERT INTO {storminvoice}
+      (vid, nid, number, reference, organization_nid, organization_title,
+      project_nid, project_title, amount, tax1, tax2,
+      total, totalcustomercurr, requestdate, duedate, paymentdate,
+      taxexempt, src_nid, src_vid) VALUES
+      (%d, %d, '%s', '%s', %d, '%s',
+      %d, '%s', %f, %f, %f,
+      %f, %f, %d, %d, %d,
+      %d, %d, %d)",
+      $node->vid, $node->nid, $node->number, $node->reference, $node->organization_nid, $node->organization_title,
+      $node->project_nid, $node->project_title, $node->amount, $node->tax1, $node->tax2,
+      $node->total, $node->totalcustomercurr, $node->requestdate, $node->duedate, $node->paymentdate,
+      $node->taxexempt, $node->src_nid, $node->src_vid);
+
+  // Insert invoice items
+  _storminvoice_insert_items($node);
+
+  _storminvoice_aftersave($node);
+}
+
+function storminvoice_update($node) {
+  _storminvoice_beforesave($node);
+
+  if ($node->revision) {
+    storminvoice_insert($node);
+  }
+  else {
+    db_query("UPDATE {storminvoice} SET
+      number='%s', reference='%s', organization_nid=%d, organization_title='%s', project_nid=%d,
+      project_title='%s', amount=%f, tax1=%f, tax2=%f, total=%f,
+      totalcustomercurr=%f, requestdate=%d, duedate=%d, paymentdate=%d, taxexempt=%d WHERE vid = %d",
+      $node->number, $node->reference, $node->organization_nid, $node->organization_title, $node->project_nid,
+      $node->project_title, $node->amount, $node->tax1, $node->tax2, $node->total,
+      $node->totalcustomercurr, $node->requestdate, $node->duedate, $node->paymentdate, $node->taxexempt, $node->vid);
+
+    // Update invoice items
+    db_query("DELETE from {storminvoice_items} WHERE invoice_vid = ". $node->vid);
+    _storminvoice_insert_items($node);
+
+    _storminvoice_aftersave($node);
+  }
+}
+
+function _storminvoice_beforesave(&$node) {
+  // Allow use of comma when inputting numerical values - str_replace with period decimal
+  $node->amount = str_replace(',', '.', $node->amount);
+  $node->tax1 = str_replace(',', '.', $node->tax1);
+  $node->tax2 = str_replace(',', '.', $node->tax2);
+  $node->total = str_replace(',', '.', $node->total);
+  $node->totalcustomercurr = str_replace(',', '.', $node->totalcustomercurr);
+
+  if (is_array($node->requestdate)) $node->requestdate = _storm_date_to_gmtimestamp($node->requestdate);
+  if (is_array($node->duedate)) $node->duedate = _storm_date_to_gmtimestamp($node->duedate);
+  if (is_array($node->paymentdate)) $node->paymentdate = _storm_date_to_gmtimestamp($node->paymentdate);
+
+  $s = "SELECT n.title FROM {node} AS n
+    INNER JOIN {stormorganization} AS o ON n.vid=o.vid
+    WHERE type='stormorganization' AND n.nid=%d";
+  $r = db_query($s, $node->organization_nid);
+  $o = db_fetch_object($r);
+  $node->organization_title = $o->title;
+
+  if (isset($node->project_nid)) {
+    $s = "SELECT n.title FROM {node} AS n
+      INNER JOIN {stormproject} AS p ON n.vid=p.vid
+      WHERE type='stormproject' AND n.nid=%d";
+    $r = db_query($s, $node->project_nid);
+    $p = db_fetch_object($r);
+    $node->project_title = (isset($p->title)) ? $p->title : NULL;
+  }
+
+  // Parse invoice items
+  // from linear to array/object combination
+  $j = 0;
+  $variable = 'items_'. $j . '_description';
+  while (isset($node->$variable)) {
+    if (empty($node->items[$j])) {
+      $node->items[$j] = new stdClass();
+    }
+    $node->items[$j]->description = $node->$variable;
+    $variable = 'items_'. $j .'_amount';
+    $node->items[$j]->amount = str_replace(',', '.', $node->$variable);
+    $variable = 'items_'. $j .'_tax1app';
+    $node->items[$j]->tax1app = $node->$variable;
+    $variable = 'items_'. $j .'_tax1percent';
+    $node->items[$j]->tax1percent = $node->$variable;
+    $variable = 'items_'. $j .'_tax2app';
+    $node->items[$j]->tax2app = $node->$variable;
+    $variable = 'items_'. $j .'_tax2percent';
+    $node->items[$j]->tax2percent = $node->$variable;
+    $variable = 'items_'. $j .'_weight';
+    $node->items[$j]->weight = (isset($node->$variable)) ? $node->$variable : $j;
+
+    $variable = 'items_'. $j .'_src_nid';
+    $node->items[$j]->src_nid = $node->$variable;
+
+    $variable = 'items_'. $j .'_src_vid';
+    $node->items[$j]->src_vid = $node->$variable;
+
+    // Update taxes
+    storm_taxation($node->items[$j]);
+
+    $j++;
+    $variable = 'items_'. $j .'_description';
+  }
+}
+
+function _storminvoice_insert_items($node) {
+  foreach ($node->items as $j => $item) {
+    $node->items[$j]->src_nid = (isset($node->items[$j]->src_nid)) ? $node->items[$j]->src_nid : $node->src_nid;
+    $node->items[$j]->src_vid = (isset($node->items[$j]->src_vid)) ? $node->items[$j]->src_vid : $node->src_vid;
+
+    db_query("INSERT INTO {storminvoice_items}
+      (invoice_nid, invoice_vid, amount, description,
+      tax1app, tax1percent, tax1,
+      tax2app, tax2percent, tax2,
+      total, weight,
+      src_nid, src_vid
+      ) VALUES
+      (%d, %d, %f, '%s',
+      %d, %f, %f,
+      %d, %f, %f,
+      %f, %d,
+      %d, %d
+      )",
+      $node->nid, $node->vid, $node->items[$j]->amount, $node->items[$j]->description,
+      $node->items[$j]->tax1app, $node->items[$j]->tax1percent, $node->items[$j]->tax1,
+      $node->items[$j]->tax2app, $node->items[$j]->tax2percent, $node->items[$j]->tax2,
+      $node->items[$j]->total, $node->items[$j]->weight,
+      $node->items[$j]->src_nid, $node->items[$j]->src_vid
+      );
+  }
+  db_query("DELETE FROM {storminvoice_items} WHERE invoice_vid=%d AND total=0 AND description='' ", $node->vid);
+}
+
+function _storminvoice_aftersave($node) {
+  // Updates totals
+  $s = "SELECT SUM(amount) tamount, SUM(tax1) ttax1, SUM(tax2) ttax2, SUM(total) ttotal
+    FROM {storminvoice_items} WHERE invoice_vid=%d";
+  $r = db_query($s, $node->vid);
+  $t = db_fetch_object($r);
+
+  $node->amount = $t->tamount;
+  $node->tax1 = $t->ttax1;
+  $node->tax2 = $t->ttax2;
+  $node->total = $t->ttotal;
+
+  if (!$node->totalcustomercurr) {
+    $node->totalcustomercurr = $node->total;
+  }
+
+  db_query("UPDATE {storminvoice} SET
+    amount=%f, tax1=%f, tax2=%f, total=%f, totalcustomercurr=%f WHERE vid = %d",
+    $node->amount, $node->tax1, $node->tax2, $node->total, $node->totalcustomercurr, $node->vid);
+}
+
+function storminvoice_nodeapi(&$node, $op, $teaser, $page) {
+  switch ($op) {
+    case 'delete revision':
+      // Notice that we're matching a single revision based on the node's vid.
+      db_query('DELETE FROM {storminvoice} WHERE vid = %d', $node->vid);
+      db_query('DELETE FROM {storminvoice_items} WHERE invoice_vid = %d', $node->vid);
+      break;
+  }
+}
+
+function storminvoice_delete($node) {
+  db_query('DELETE FROM {storminvoice} WHERE nid = %d', $node->nid);
+  db_query('DELETE FROM {storminvoice_items} WHERE invoice_nid = %d', $node->nid);
+}
+
+function storminvoice_load($node) {
+  $additions = db_fetch_object(db_query('SELECT * FROM {storminvoice} WHERE vid = %d', $node->vid));
+
+  // Load invoice items
+  $result = db_query('SELECT * FROM {storminvoice_items} WHERE invoice_vid = %d ORDER BY weight ASC', $node->vid);
+  $additions->items = array();
+  while ($item = db_fetch_object($result)) {
+    $additions->items[] = $item;
+  }
+
+  return $additions;
+}
+
+function storminvoice_view($node, $teaser = FALSE, $page = FALSE) {
+  $breadcrumb = array();
+  $breadcrumb[] = l(t('Storm'), 'storm');
+  $breadcrumb[] = l(t('Invoices'), 'storm/invoices');
+  drupal_set_breadcrumb($breadcrumb);
+
+  return theme('storminvoice_view', $node, $teaser = FALSE, $page = FALSE);
+}
+
+// ADMIN SETTINGS
+function storminvoice_admin_settings() {
+  $form = array();
+
+  $form['storminvoice_payment_days'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Number of days for invoice payment'),
+    '#default_value' => variable_get('storminvoice_payment_days', 30),
+    '#description' => t('Default number of days for invoice payment'),
+    '#size' => 5,
+  );
+
+  $form['storminvoice_hours_per_day'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Number of hours in a day'),
+    '#default_value' => variable_get('storminvoice_hours_per_day', 8),
+    '#description' => t('Number of hours in a day, used for calculating the daily rate.'),
+    '#size' => 3,
+  );
+
+  $form['storminvoice_payment_modes'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Modes for invoice payment'),
+    '#default_value' => variable_get('storminvoice_payment_modes', ''),
+    '#description' => t('Modes for invoice payment'),
+  );
+
+  $form['storminvoice_cover_note_subject'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Cover note subject'),
+    '#default_value' => variable_get('storminvoice_cover_note_subject', t('Invoice from !site', array('!site' => variable_get('site_name', 'STORM')))),
+    '#description' => t('Default subject for cover note'),
+    '#size' => 50,
+  );
+
+  $form['storminvoice_cover_note'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Cover note for invoice'),
+    '#default_value' => variable_get('storminvoice_cover_note', 'Hope this comes easy to you.'),
+    '#description' => t('Default cover note for pdf invoice sent by email'),
+  );
+
+  $form['storminvoice_payment_terms'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Payment terms'),
+    '#default_value' => variable_get('storminvoice_payment_terms', t('Due on receipt')),
+    '#description' => t('Payment terms'),
+    '#size' => 50,
+  );
+
+  $form['storminvoice_tcpdf_location'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Location of tcpdf library'),
+    '#default_value' => variable_get('storminvoice_tcpdf_location', t('sites/all/libraries/tcpdf')),
+    '#description' => t('The directory that contains the <a href="http://sourceforge.net/projects/tcpdf/files/">TCPDF library</a> (sites/all/libraries/tcpdf is recommended).'),
+    '#size' => 50,
+  );
+
+  return system_settings_form($form);
+}
+
+// VIEWS HOOK
+function storminvoice_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'storminvoice'),
+  );
+}
+
+// Helper function to return items for a particular invoice. Called from within the theme functions
+function storminvoice_getitems($invoice_vid) {
+  $s = "SELECT sit.* FROM {storminvoice_items} AS sit WHERE sit.invoice_vid = %d ORDER BY sit.weight ASC";
+  $r = db_query($s, $invoice_vid);
+
+  $items = array();
+  while ($i = db_fetch_object($r)) {
+    $items[] = $i;
+  }
+  return $items;
+}
+/**
+ * @function
+ * Creates next incremental invoice number
+ *
+ * @return varchar text value of the calculated invoice number
+ */
+function storminvoice_get_invoice_number($requestdate) {
+  $s = "SELECT MAX(CAST(SUBSTRING_INDEX(sin.number, '/', 1) AS SIGNED)) FROM {node} n INNER JOIN {storminvoice} sin ON n.nid=sin.nid
+    WHERE n.type='storminvoice' AND YEAR(FROM_UNIXTIME(sin.requestdate))=YEAR(FROM_UNIXTIME(%d))";
+  $date = getdate($requestdate);
+  $new_invoice_number = (db_result(db_query($s, $requestdate)) + 1) .'/'. $date['year'];
+
+  return $new_invoice_number;
+}
+
+/**
+ * Try to obtain an hourly rate or fixed price for the new invoice item for a timetracking node.
+ * To do this we will use the first technique, among the following, to work:
+ *  (1) try to obtain a rate from a ticket
+ *  (2) try to obtain a rate from a task
+ *  (3) try to obtain a rate from a project
+ *  (4) try to obtain a rate from an organization
+ *  (5) return an error if none of this worked.
+ *
+ * @return
+ *   Variables in an array.
+ */
+function storminvoice_get_rate($node) {
+  $rate_array = array('pricemode_used' => '', 'rate_to_use' => 0);
+
+  $hours_per_day = variable_get('storminvoice_hours_per_day', 8);
+  $found = FALSE;
+
+  $node_list = array();
+
+  switch ($node->type) {
+    case 'stormtimetracking':
+      $node_list = array('ticket' => $node->ticket_nid, 'task' => $node->task_nid, 'project' => $node->project_nid, 'organization' => $node->organization_nid);
+      break;
+    case 'stormproject':
+      $node_list = array('project' => $node->nid, 'organization' => $node->organization_nid);
+      break;
+    case 'stormtask':
+      $node_list = array('task' => $node->nid, 'project' => $node->project_nid, 'organization' => $node->organization_nid);
+      break;
+    case 'stormticket':
+      $node_list = array('ticket' => $node->nid, 'task' => $node->task_nid, 'project' => $node->project_nid, 'organization' => $node->organization_nid);
+      break;
+  }
+
+  foreach ($node_list as $type => $nid) {
+    if ($nid) {
+      $parent_item = node_load($nid);
+      switch ($parent_item->pricemode) {
+        case 'hourly':
+          if ($parent_item->durationunit == 'hour') {
+            $found = TRUE;
+            $rate_array['rate_to_use'] = $parent_item->price;
+          }
+          elseif ($parent_item->durationunit == 'day') {
+            $found = TRUE;
+            $rate_array['rate_to_use'] = $parent_item->price * $hours_per_day;
+          }
+          break;
+
+        case 'daily':
+          if ($parent_item->durationunit == 'hour') {
+            $found = TRUE;
+            $rate_array['rate_to_use'] = $parent_item->price / $hours_per_day;
+          }
+          elseif ($parent_item->durationunit == 'day') {
+            $found = TRUE;
+            $rate_array['rate_to_use'] = $parent_item->price;
+          }
+          break;
+
+        case 'fixed':
+          $found = TRUE;
+          $rate_array['rate_to_use'] = 0;
+          break;
+
+        case 'fixed_price':
+          $found = TRUE;
+          $rate_array['rate_to_use'] = $parent_item->price;
+          break;
+
+        default:
+          continue;
+      }
+    }
+    if ($found == TRUE) {
+      $rate_array['pricemode_used'] = $parent_item->pricemode;
+      break;
+    }
+  }
+  if ($found == FALSE) {
+    drupal_set_message(t('Error whilst finding a rate from ticket, task, project and organization. Consider setting the pricemode and price for your client organizations to avoid this error.'), 'error');
+  }
+  return $rate_array;
+}
+
+function storminvoice_get_item_desc($rate_array, $node) {
+
+  switch ($rate_array['pricemode_used']) {
+    case 'hourly':
+      if ($node->type == 'stormtimetracking') {
+        $description = date('d M y', $node->trackingdate) . ': ' . t('@dur @units work at @rate per hour on @desc', array('@dur' => $node->billing_duration, '@unit' => $node->durationunit, '@rate' => $node->price, '@desc' => $node->title));
+      }
+      else {
+        $description = date('d M y') . ': ' . t('@dur @units work at @rate per hour on @desc', array('@dur' => $node->duration, '@unit' => $node->durationunit, '@rate' => $node->price, '@desc' => $node->title));
+      }
+      break;
+    case 'daily':
+      if ($node->type == 'stormtimetracking') {
+        $description = date('d M y', $node->trackingdate) . ': ' . t('@dur @units work at @rate per day on @desc', array('@dur' => $node->billing_duration, '@unit' => $node->durationunit, '@rate' => $node->price, '@desc' => $node->title));
+      }
+      else {
+        $description = date('d M y') . ': ' . t('@dur @units work at @rate per day on @desc', array('@dur' => $node->duration, '@unit' => $node->durationunit, '@rate' => $node->price, '@desc' => $node->title));
+      }
+      break;
+    case 'fixed':
+      if ($node->type == 'stormtimetracking') {
+        $description = date('d M y', $node->trackingdate) . ': ' . t('@dur @units unbilled work on @desc', array('@dur' => $node->billing_duration, '@unit' => $node->durationunit, '@desc' => $node->title));
+      }
+      else {
+        $description = date('d M y') . ': ' . t('@dur @units unbilled work on @desc', array('@dur' => $node->duration, '@unit' => $node->durationunit, '@desc' => $node->title));
+      }
+      break;
+    case 'fixed_price':
+      switch ($node->type) {
+        case 'stormtimetracking':
+        $description = date('d M y', $node->trackingdate) . ': ' . t('work billed for @desc', array('@desc' => $node->title));
+        break;
+      case 'stormproject':
+        $description = t('Project billed: @desc', array('@desc' => $node->title));
+        break;
+      case 'stormtask':
+        $description = t('Task billed: @desc', array('@desc' => $node->title));
+        break;
+      case 'stormticket':
+        $description = t('Ticket billed: @desc', array('@desc' => $node->title));
+        break;
+      }
+  }
+
+  return $description;
+
+}
+
+function storminvoice_get_item_amount($rate_array, $node) {
+  switch ($rate_array['pricemode_used']) {
+    case 'hourly':
+      if ($node->type == 'stormtimetracking') {
+        $amount = $node->billing_duration * $rate_array['rate_to_use'];
+      }
+      else {
+        $amount = $node->duration * $rate_array['rate_to_use'];
+      }
+      break;
+    case 'daily':
+      if ($node->type == 'stormtimetracking') {
+        $amount = $node->billing_duration * $rate_array['rate_to_use'];
+      }
+      else {
+        $amount = $node->duration * $rate_array['rate_to_use'];
+      }
+      break;
+    case 'fixed':
+      $amount = $rate_array['rate_to_use'];
+      break;
+    case 'fixed_price':
+      $amount = $rate_array['rate_to_use'];
+      break;
+    }
+
+  return $amount;
+}
+
+/**
+ * Implementation of hook_token_list().
+ */
+function storminvoice_token_list($type='all') {
+  $tokens = array();
+  if (($type == 'node') || ($type == 'all')) {
+    $tokens['node']['storminvoice-number'] = t('Storm Invoice: Number.');
+    $tokens['node']['storminvoice-reference'] = t('Storm Invoice: Reference.');
+    $tokens['node']['storminvoice-organization-nid'] = t('Storm Invoice: Organization Node ID.');
+    $tokens['node']['storminvoice-organization-title'] = t('Storm Invoice: Organization Title.');
+    $tokens['node']['storminvoice-project-nid'] = t('Storm Invoice: Project Node ID.');
+    $tokens['node']['storminvoice-project-title'] = t('Storm Invoice: Project Title.');
+    $tokens['node']['storminvoice-requestdate'] = t('Storm Invoice: Request Date.');
+    $tokens['node']['storminvoice-duedate'] = t('Storm Invoice: Due Date.');
+    $tokens['node']['storminvoice-paymentdate'] = t('Storm Invoice: Payment Date.');
+    $tokens['node']['storminvoice-amount'] = t('Storm Invoice: Amount.');
+    $tokens['node']['storminvoice-total'] = t('Storm Invoice: Total.');
+    $tokens['node']['storminvoice-totalcustomer'] = t('Storm Invoice: Total in customer currency.');
+    $tokens['node']['storminvoice-taxexempt'] = t('Storm Invoice: Tax Exempt.');
+    if (variable_get('storm_tax1_app', 0)) {
+      $tokens['node']['storminvoice-tax1'] = t('Storm Invoice: '. variable_get('storm_tax1_name', 'VAT') .'.');
+    }
+    if (variable_get('storm_tax2_app', 0)) {
+      $tokens['node']['storminvoice-tax2'] = t('Storm Invoice: '. variable_get('storm_tax2_name', 'Tax 2') .'.');
+    }
+  }
+  return $tokens;
+}
+
+/**
+ * Implementation of hook_token_values().
+ */
+function storminvoice_token_values($type, $object = NULL) {
+  $values = array();
+  $node = $object;
+  if ((($type == 'node') || ($type == 'all')) && ($node->type === 'storminvoice')) {
+    $values['storminvoice-number'] = $node->number;
+    $values['storminvoice-reference'] = $node->reference;
+    $values['storminvoice-organization-nid'] = $node->organization_nid;
+    $values['storminvoice-organization-title'] = $node->organization_title;
+    $values['storminvoice-project-nid'] = $node->project_nid;
+    $values['storminvoice-project-title'] = $node->project_title;
+    $values['storminvoice-requestdate'] = format_date($node->requestdate, 'medium', '', variable_get('date_default_timezone', NULL));
+    $values['storminvoice-payment'] = format_date($node->paymentdate, 'medium', '', variable_get('date_default_timezone', NULL));
+    $values['storminvoice-duedate'] = format_date($node->duedate, 'medium', '', variable_get('date_default_timezone', NULL));
+    $values['storminvoice-amount'] = $node->amount;
+    $values['storminvoice-total'] = $node->total;
+    $values['storminvoice-totalcustomer'] = $node->totalcustomer;
+    $values['storminvoice-taxexempt'] = $node->taxexempt;
+    if (variable_get('storm_tax1_app', 0)) {
+      $values['storminvoice-tax1'] = $node->tax1;
+    }
+    if (variable_get('storm_tax2_app', 0)) {
+      $values['storminvoice-tax2'] = $node->tax2;
+    }
+  return $values;
+  }
+}
+
+function storminvoice_storm_dashboard_links($type) {
+  $links = array();
+  if ($type == 'page' || $type == 'block') {
+    $links[] = array(
+      'theme' => 'storm_dashboard_link',
+      'title' => t('Invoices'),
+      'icon' => 'storminvoices',
+      'path' => 'storm/invoices',
+      'params' => array(),
+      'access_arguments' => 'Storm invoice: access',
+      'node_type' => 'storminvoice',
+      'add_type' => 'storminvoice',
+      'map' => array(),
+      'weight' => 10,
+    );
+  }
+  return $links;
+}

@@ -1,0 +1,224 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm Person module.
+ */
+class StormpersonTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Storm Person functionality',
+      'description' => 'Test the functionality of the Storm Person module',
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormperson');
+    $privileged_user = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm person: add'));
+    $this->drupalLogin($privileged_user);
+  }
+
+  public function testStormpersonAccess() {
+    $this->drupalGet('storm/people');
+    $this->assertResponse(403, t('Make sure access is denied to Storm People list for anonymous user'));
+
+    $basic_user = $this->drupalCreateUser();
+    $this->drupalLogin($basic_user);
+    $this->drupalGet('storm/people');
+    $this->assertResponse(403, t('Make sure access is denied to Storm People list for basic user'));
+
+    $privileged_user = $this->drupalCreateUser(array('Storm person: access'));
+    $this->drupalLogin($privileged_user);
+    $this->drupalGet('storm/people');
+    $this->assertText(t('People'), t('Make sure the correct page has been displayed by checking that the title is "People".'));
+  }
+
+  public function testStormpersonCreate() {
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $person = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $this->drupalPost('node/add/stormperson', $person, t('Save'));
+    $this->assertText(t('Person @title has been created.', array('@title' => $person['title'])));
+  }
+
+  public function testStormpersonList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm person: access', 'Storm person: add', 'Storm person: view all', 'Storm person: edit all', 'Storm person: delete all'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm person: access', 'Storm person: add', 'Storm person: view of user organization', 'Storm person: edit of user organization', 'Storm person: delete of user organization'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm person: access', 'Storm person: add', 'Storm person: view own', 'Storm person: edit own', 'Storm person: delete own'));
+    $userLinked = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm person: access', 'Storm person: add', 'Storm person: view when linked to own user account', 'Storm person: edit when linked to own user account', 'Storm person: delete when linked to own user account'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm person: access', 'Storm person: add', 'Storm person: view all', 'Storm person: edit own', 'Storm person: delete own'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    // Create organization
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    // Create persons
+    $person1 = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormperson', $person1, t('Save'));
+    $person1 = node_load(array('title' => $person1['title']));
+
+    $person4 = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'user_name' => $userLinked->name,
+    );
+    $this->drupalPost('node/add/stormperson', $person4, t('Save'));
+    $person4 = node_load(array('title' => $person4['title']));
+
+    $this->drupalLogin($userOwn);
+    $person2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+    );
+    $this->drupalPost('node/add/stormperson', $person2, t('Save'));
+    $person2 = node_load(array('title' => $person2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $person3 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org2->nid,
+    );
+    $this->drupalPost('node/add/stormperson', $person3, t('Save'));
+    $person3 = node_load(array('title' => $person3['title']));
+
+    // Test for 'Storm person: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/people');
+
+    $this->assertLink($person1->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person1->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person1->nid .'/delete', 'The Person edit icon appears on the list');
+
+    $this->assertLink($person2->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person2->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person2->nid .'/delete', 'The Person edit icon appears on the list');
+
+    $this->assertLink($person3->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person3->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person3->nid .'/delete', 'The Person edit icon appears on the list');
+
+    $this->assertLink($person4->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person4->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person4->nid .'/delete', 'The Person edit icon appears on the list');
+
+    // Test for 'Storm person: view of user organization'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/people');
+
+    $this->assertLink($person1->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person1->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person1->nid .'/delete', 'The Person edit icon appears on the list');
+
+    $this->assertLink($person2->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person2->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person2->nid .'/delete', 'The Person edit icon appears on the list');
+
+    $this->assertNoLink($person3->title, 'The Person does not appear on the list');
+    $this->assertNoRaw('node/'. $person3->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person3->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    $this->assertLink($person4->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person4->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person4->nid .'/delete', 'The Person edit icon appears on the list');
+
+    // Test for 'Storm person: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/people');
+
+    $this->assertNoLink($person1->title, 'The Person does not appear on the list');
+    $this->assertNoRaw('node/'. $person1->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person1->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    $this->assertLink($person2->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person2->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person2->nid .'/delete', 'The Person edit icon appears on the list');
+
+    $this->assertNoLink($person3->title, 'The Person does not appear on the list');
+    $this->assertNoRaw('node/'. $person3->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person3->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    $this->assertNoLink($person4->title, 'The Person does not appear on the list');
+    $this->assertNoRaw('node/'. $person4->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person4->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    // Test for 'Storm person: view all', 'Storm invoice: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/people');
+
+    $this->assertLink($person1->title, 0, 'The Person appears on the list');
+    $this->assertNoRaw('node/'. $person1->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person1->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    $this->assertLink($person2->title, 0, 'The Person appears on the list');
+    $this->assertNoRaw('node/'. $person2->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person2->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    $this->assertLink($person3->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person3->nid .'/edit', 'The Person edit icon appears on the list');
+    $this->assertRaw('node/'. $person3->nid .'/delete', 'The Person edit icon appears on the list');
+
+    $this->assertLink($person4->title, 0, 'The Person appears on the list');
+    $this->assertNoRaw('node/'. $person4->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person4->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    // Test for 'Storm person: view when linked to own user account'
+    $this->drupalLogin($userLinked);
+    $this->drupalGet('storm/people');
+
+    $this->assertNoLink($person1->title, 'The Person does not appear on the list');
+    $this->assertNoRaw('node/'. $person1->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person1->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    $this->assertNoLink($person2->title, 'The Person does not appear on the list');
+    $this->assertNoRaw('node/'. $person2->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person2->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    $this->assertNoLink($person3->title, 'The Person does not appear on the list');
+    $this->assertNoRaw('node/'. $person3->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $person3->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+    $this->assertLink($person4->title, 0, 'The Person appears on the list');
+    $this->assertRaw('node/'. $person4->nid .'/edit', 'The Person edit icon does not appear on the list');
+    $this->assertRaw('node/'. $person4->nid .'/delete', 'The Person edit icon does not appear on the list');
+
+  }
+}

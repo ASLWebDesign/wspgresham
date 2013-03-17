@@ -1,0 +1,930 @@
+<?php
+
+/**
+ * @file
+ *
+ * 1: Hooks
+ * 2: Access functions
+ */
+
+// HOOKS
+function stormticket_help($path, $arg) {
+  $o = '';
+
+  switch ($path) {
+    case "admin/help#stormticket":
+      $o = '<p>'. t("Provides ticket support for Storm") .'</p>';
+      break;
+  }
+  return $o;
+}
+
+function stormticket_perm() {
+  return array(
+    'Storm ticket: access',
+    'Storm ticket: add',
+    'Storm ticket: delete all',
+    'Storm ticket: delete own',
+    'Storm ticket: delete of user organization',
+    'Storm ticket: delete if assigned to ticket',
+    'Storm ticket: edit all',
+    'Storm ticket: edit own',
+    'Storm ticket: edit of user organization',
+    'Storm ticket: edit if assigned to ticket',
+    'Storm ticket: view all',
+    'Storm ticket: view own',
+    'Storm ticket: view of user organization',
+    'Storm ticket: view if assigned to ticket',
+  );
+}
+
+function stormticket_init() {
+  drupal_add_js(drupal_get_path('module', 'stormticket') .'/stormticket.js', 'module', 'header', FALSE);
+
+  $settings = array(
+    'storm' => array(
+      'task_tickets_url' => url('storm/task_tickets_js/')
+    ),
+  );
+  drupal_add_js($settings, 'setting');
+}
+
+// ACCESS FUNCTIONS
+function stormticket_access($op, $node, $account=NULL) {
+  if (empty($account)) {
+    global $user;
+    $account = $user;
+  }
+
+  if ($op == 'create') {
+    return user_access('Storm ticket: add');
+  }
+
+  if (is_numeric($node)) $node = node_load($node);
+
+  if (!isset($account->stormorganization_nid) && module_exists('stormperson')) {
+    _stormperson_user_load($account);
+  }
+
+  if ($op == 'delete') {
+    if (user_access('Storm ticket: delete all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: delete own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: delete of user organization') && ($account->stormorganization_nid == $node->organization_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: delete if assigned to ticket') && ($account->stormperson_nid == $node->assigned_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: delete if assigned to ticket') && module_exists('stormteam') && stormteam_user_belongs_to_team($node->assigned_nid, $account->stormperson_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: delete if assigned to ticket') && module_exists('stormteam') && stormteam_user_belongs_to_team($node->assigned_nid, $account->stormorganization_nid)) {
+      return TRUE;
+    }
+  }
+
+  if ($op == 'update') {
+    if (user_access('Storm ticket: edit all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: edit own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: edit of user organization') && ($account->stormorganization_nid == $node->organization_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: edit if assigned to ticket') && ($account->stormperson_nid == $node->assigned_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: edit if assigned to ticket') && module_exists('stormteam') && stormteam_user_belongs_to_team($node->assigned_nid, $account->stormperson_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: edit if assigned to ticket') && module_exists('stormteam') && stormteam_user_belongs_to_team($node->assigned_nid, $account->stormorganization_nid)) {
+      return TRUE;
+    }
+  }
+
+  if ($op == 'view') {
+    if (user_access('Storm ticket: view all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: view own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: view of user organization') && ($account->stormorganization_nid == $node->organization_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: view if assigned to ticket') && ($account->stormperson_nid == $node->assigned_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: view if assigned to ticket') && module_exists('stormteam') && stormteam_user_belongs_to_team($node->assigned_nid, $account->stormperson_nid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm ticket: view if assigned to ticket') && module_exists('stormteam') && stormteam_user_belongs_to_team($node->assigned_nid, $account->stormorganization_nid)) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+function stormticket_access_sql($sql, $where=array()) {
+  if (user_access('Storm ticket: view all')) {
+    $where[] = "'storm_access'='storm_access'";
+    return storm_rewrite_sql($sql, $where);
+  }
+
+  global $user;
+
+  $cond = '';
+  if (user_access('Storm ticket: view own')) {
+    $cond .= 'n.uid='. $user->uid;
+  }
+  if (user_access('Storm ticket: view of user organization')) {
+    if (!empty($cond)) $cond .= ' OR ';
+    $cond .= 'sti.organization_nid='. $user->stormorganization_nid;
+  }
+  if (user_access('Storm ticket: view if assigned to ticket')) {
+    if (!empty($cond)) $cond .= ' OR ';
+    $cond .= 'sti.assigned_nid='. $user->stormperson_nid;
+
+    if (module_exists('stormteam')) {
+      // Load teams that the account belongs to
+      $belonged_teams = stormteam_user_return_teams();
+      // Allow access if any of those teams is the one in question
+      foreach ($belonged_teams as $belonged_team) {
+        $cond .= ' OR sti.assigned_nid = '. $belonged_team;
+      }
+    }
+  }
+
+  if (empty($cond)) $cond = '0=1';
+  $where[] = $cond;
+
+  $where[] = "'storm_access'='storm_access'";
+  return storm_rewrite_sql($sql, $where);
+}
+
+function stormticket_storm_rewrite_where_sql($query, $primary_table, $account) {
+  static $conds = array();
+
+  if (isset($conds[$primary_table][$account->uid])) {
+    return $conds[$primary_table][$account->uid];
+  }
+
+  if (preg_match("/'storm_access'='storm_access'/", $query)) {
+    $cond = '';
+  }
+  else {
+    if (user_access('Storm ticket: view all', $account)) {
+      return '';
+    }
+
+    $cond = '';
+    if (user_access('Storm ticket: view own', $account)) {
+      $cond .= " ${primary_table}.uid=". $account->uid;
+    }
+    if (user_access('Storm ticket: view of user organization', $account)) {
+      if ($cond) {
+        $cond .= ' OR ';
+      }
+      // If function is called without viewing a ticket, this variable may not be set.
+      // These lines check for that and set the organization node id to zero if not otherwise set.
+      if (!isset($account->stormorganization_nid)) {
+        $account->stormorganization_nid = 0;
+      }
+      $cond .= ' sti1.organization_nid='. $account->stormorganization_nid;
+    }
+    if (user_access('Storm ticket: view if assigned to ticket')) {
+      if ($cond) $cond .= ' OR ';
+      $cond .= 'sti1.assigned_nid='. $account->uid;
+
+      if (module_exists('stormteam')) {
+        // Load teams that the account belongs to
+        $belonged_teams = stormteam_user_return_teams($account);
+        // Allow access if any of those teams is the one in question
+        foreach ($belonged_teams as $belonged_team) {
+          $cond .= ' OR sti1.assigned_nid = '. $belonged_team;
+        }
+      }
+    }
+
+    if ($cond) {
+      $cond = " WHEN 'stormticket' THEN (SELECT IF($cond,1,0) FROM {stormticket} sti1 WHERE sti1.vid=${primary_table}.vid) ";
+    }
+    else {
+      $cond = " WHEN 'stormticket' THEN 0 ";
+    }
+  }
+
+  $conds[$primary_table][$account->uid] = $cond;
+  return $cond;
+}
+
+function stormticket_menu() {
+  $items = array();
+
+  $items['storm/tickets'] = array(
+    'title' => 'Tickets',
+    'description' => 'Storm tickets',
+    'page callback' => 'stormticket_list',
+    'access arguments' => array('Storm ticket: access'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'stormticket.admin.inc',
+    'weight' => 5,
+  );
+
+  $items['storm/task_tickets_js/%/%/%'] = array(
+    'title' => 'Tickets',
+    'page callback' => '_stormticket_task_tickets_js',
+    'page arguments' => array(2, 3, 4),
+    'access callback' => TRUE,
+    'file' => 'stormticket.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['admin/settings/storm/ticket'] = array(
+    'title' => 'Storm ticket',
+    'description' => 'Storm ticket administration page',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stormticket_admin_settings'),
+    'access arguments' => array('Storm: access administration pages'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+function stormticket_theme() {
+  return array(
+    'stormticket_list' => array(
+      'file'      => 'stormticket.theme.inc',
+      'arguments' => array('header', 'tickets'),
+    ),
+    'stormticket_view' => array(
+      'file'      => 'stormticket.theme.inc',
+      'arguments' => array('node', 'teaser', 'page'),
+    ),
+  );
+}
+
+function stormticket_node_info() {
+  return array(
+    'stormticket' => array(
+      'name' => t('Ticket'),
+      'module' => 'stormticket',
+      'description' => t("A ticket for Storm."),
+      'title_label' => t("Title"),
+      'body_label' => t("Description"),
+    )
+  );
+}
+
+function stormticket_content_extra_fields($type_name) {
+  if ($type_name == 'stormticket') {
+    return array(
+      'group1' => array('label' => 'Organization/Project/Task Group', 'weight' => -20),
+      'group2' => array('label' => 'Category/Status/Priority Group', 'weight' => -19),
+      'group3' => array('label' => 'Date/Duration Group', 'weight' => -18),
+      'group4' => array('label' => 'Price Group', 'weight' => -17),
+      'group5' => array('label' => 'Assigned to', 'weight' => -16),
+      'group6' => array('label' => 'Billable / Billed Group', 'weight' => -15),
+    );
+  }
+}
+
+// ORGANISATION / PROJECT / TASK UPDATE FUNCTIONS
+function stormticket_stormorganization_change($organization_nid, $organization_title) {
+  $s = "UPDATE {stormticket} SET organization_title='%s' WHERE organization_nid=%d AND organization_title <> '%s'";
+  db_query($s, $organization_title, $organization_nid, $organization_title);
+}
+
+function stormticket_stormproject_change($project_nid, $project_title) {
+  $s = "UPDATE {stormticket} SET project_title='%s' WHERE project_nid=%d AND project_title <> '%s'";
+  db_query($s, $project_title, $project_nid, $project_title);
+}
+
+function stormticket_stormtask_change($task_nid, $task_title, $task_stepno) {
+  $s = "UPDATE {stormticket} SET task_title='%s', task_stepno='%s' WHERE task_nid=%d AND
+      (task_title<>'%s' OR task_stepno<>'%s')";
+  db_query($s, $task_title, $task_stepno, $task_nid, $task_title, $task_stepno);
+}
+
+function stormticket_stormproject_change_hierarchy($project_nid, $organization_nid, $organization_title) {
+  $s = "UPDATE {stormticket} SET organization_nid=%d, organization_title='%s' WHERE project_nid=%d";
+  db_query($s, $organization_nid, $organization_title, $project_nid);
+}
+
+function stormticket_stormtask_change_hierarchy($task_nid, $organization_nid, $organization_title, $project_nid, $project_title) {
+  $s = "UPDATE {stormticket} SET organization_nid=%d, organization_title='%s', project_nid=%d, project_title='%s' WHERE task_nid=%d";
+  db_query($s, $organization_nid, $organization_title, $project_nid, $project_title, $task_nid);
+}
+
+// TICKET CREATE / EDIT FORM
+function stormticket_form(&$node) {
+  $breadcrumb = array();
+  $breadcrumb[] = l(t('Storm'), 'storm');
+  $breadcrumb[] = l(t('Tickets'), 'storm/tickets');
+  drupal_set_breadcrumb($breadcrumb);
+
+  if (arg(1)=='add') {
+    $node->datebegin = time();
+
+    if (array_key_exists('organization_nid', $_GET) && empty($node->organization_nid)) {
+      $node->organization_nid = $_GET['organization_nid'];
+    }
+    if (array_key_exists('project_nid', $_GET) && empty($node->project_nid)) {
+      $node->project_nid = $_GET['project_nid'];
+      $p = node_load($node->project_nid);
+      $node->organization_nid = $p->organization_nid;
+      if (!stormorganization_access('view', $node->organization_nid)) {
+        drupal_set_message(t("You cannot add a ticket for this project, as you do not have access to view the organization's profile"));
+        drupal_goto('node/'. $node->project_nid);
+      }
+    }
+    if (array_key_exists('task_nid', $_GET) && empty($node->task_nid)) {
+      $node->task_nid = $_GET['task_nid'];
+      $t = node_load($node->task_nid);
+      $node->organization_nid = $t->organization_nid;
+      $node->project_nid = $t->project_nid;
+      // $project_access deals with the case whereby the project could be blank, hence access rules not required
+      $project_access = $node->project_nid ? stormproject_access('view', $node->project_nid) : TRUE;
+      if (!stormorganization_access('view', $node->organization_nid) || !stormproject_access('view', $node->project_nid)) {
+        drupal_set_message(t("You cannot add a ticket for this task, as you do not have access to view the both the organization and project's profile"));
+        drupal_goto('node/'. $node->task_nid);
+      }
+    }
+
+    if (isset($_SESSION['stormticket_list_filter']['organization_nid']) && !$node->organization_nid) {
+      $node->organization_nid = $_SESSION['stormticket_list_filter']['organization_nid'];
+    }
+    if (isset($_SESSION['stormticket_list_filter']['project_nid']) && !$node->project_nid) {
+      $node->project_nid = $_SESSION['stormticket_list_filter']['project_nid'];
+    }
+    if (isset($_SESSION['stormticket_list_filter']['task_nid']) && !$node->task_nid) {
+      $node->task_nid = $_SESSION['stormticket_list_filter']['task_nid'];
+    }
+
+    if (array_key_exists('organization_nid', $_GET)) $node->organization_nid = $_GET['organization_nid'];
+    if (array_key_exists('project_nid', $_GET)) $node->project_nid = $_GET['project_nid'];
+    if (array_key_exists('task_nid', $_GET)) $node->task_nid = $_GET['task_nid'];
+    $s_org = "SELECT n.nid, n.title FROM {stormorganization} so INNER JOIN {node} n
+              ON so.nid=n.nid WHERE n.status=1 AND so.isactive=1 AND n.type='stormorganization' ORDER BY n.title";
+
+    $node->billable = variable_get('stormticket_billable_default', FALSE);
+
+  }
+  else {
+    $s_org = "SELECT n.nid, n.title FROM {stormorganization} so INNER JOIN {node} n
+              ON so.nid=n.nid WHERE n.status=1 AND n.type='stormorganization' ORDER BY n.title";
+  }
+
+  $type = node_get_types('type', $node);
+
+  $form['#attributes']['class'] = 'stormcomponent_node_form';
+
+  $form['group1'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group1') : -20,
+  );
+
+  $s_org = stormorganization_access_sql($s_org);
+  $s_org = db_rewrite_sql($s_org);
+  $r = db_query($s_org);
+  $organizations = array();
+  while ($organization = db_fetch_object($r)) {
+    $organizations[$organization->nid] = $organization->title;
+    if (!isset($node->organization_nid)) {
+      $node->organization_nid = $organization->nid;
+    }
+  }
+  $form['group1']['organization_nid'] = array(
+    '#type' => 'select',
+    '#title' => t('Organization'),
+    '#default_value' => $node->organization_nid,
+    '#options' => $organizations,
+    '#required' => TRUE,
+    '#attributes' => array('onchange' => "stormtask_organization_project_tasks(this, 'edit-project-nid', 'edit-parent-nid', 'edit-assigned-nid', true, '-')"),
+  );
+
+  $s = "SELECT n.nid, n.title FROM {node} AS n INNER JOIN {stormproject} AS spr ON spr.vid=n.vid WHERE spr.organization_nid=%d AND n.status=1 AND n.type='stormproject' ORDER BY n.title";
+  $s = stormproject_access_sql($s);
+  $s = db_rewrite_sql($s);
+  $r = db_query($s, $node->organization_nid);
+  $projects = array();
+  while ($project = db_fetch_object($r)) {
+    $projects[$project->nid] = $project->title;
+  }
+  $form['group1']['project_nid'] = array(
+    '#type' => 'select',
+    '#title' => t('Project'),
+    '#default_value' => isset($node->project_nid) ? $node->project_nid : 0,
+    '#options' => array(0 => '-') + $projects,
+    '#process' => array('storm_dependent_select_process'),
+    '#attributes' => array('onchange' => "stormtask_project_tasks('edit-organization-nid', this, 'edit-task-nid', 'edit-assigned-nid', true, '-')"),
+  );
+
+  $tree = isset($node->project_nid) ? _stormtask_get_tree($node->project_nid) : array();
+  $tasks = _stormtask_plain_tree($tree);
+  $form['group1']['task_nid'] = array(
+    '#type' => 'select',
+    '#title' => t('Task'),
+    '#default_value' => isset($node->task_nid) ? $node->task_nid : 0,
+    '#options' => array(0 => '-') + $tasks,
+    '#process' => array('storm_dependent_select_process'),
+  );
+
+  $form['group1']['task_nid_old'] = array(
+    '#type' => 'hidden',
+    '#default_value' => isset($node->task_nid) ? $node->task_nid : NULL,
+  );
+
+  $form['group2'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group2') : -19,
+  );
+
+  $category_list = storm_attributes_bydomain('Ticket category');
+  $form['group2']['ticketcategory'] = array(
+    '#type' => 'select',
+    '#title' => t('Category'),
+    '#default_value' => $node->ticketcategory,
+    '#options' => $category_list['values'],
+  );
+
+  $status_list = storm_attributes_bydomain('Ticket status');
+  $form['group2']['ticketstatus'] = array(
+    '#type' => 'select',
+    '#title' => t('Status'),
+    '#default_value' => $node->ticketstatus,
+    '#options' => $status_list['values'],
+  );
+
+  $priority_list = storm_attributes_bydomain('Ticket priority');
+  $form['group2']['ticketpriority'] = array(
+    '#type' => 'select',
+    '#title' => t('Priority'),
+    '#default_value' => $node->ticketpriority,
+    '#options' => $priority_list['values'],
+  );
+
+  $form['title'] = array(
+    '#type' => 'textfield',
+    '#title' => check_plain($type->title_label),
+    '#required' => TRUE,
+    '#default_value' => $node->title,
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'title') : -18,
+  );
+
+  $form['group3'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group3') : -17,
+  );
+
+  $form['group3']['datebegin'] = array(
+    '#type' => 'dateext',
+    '#title' => t('Date begin'),
+    '#withnull' => TRUE,
+    '#default_value' => $node->datebegin,
+  );
+
+  $form['group3']['dateend'] = array(
+    '#type' => 'dateext',
+    '#title' => t('Date end'),
+    '#withnull' => TRUE,
+    '#default_value' => isset($node->dateend) ? $node->dateend : NULL,
+  );
+
+  $durationunits = storm_attributes_bydomain('Duration unit');
+  $form['group3']['durationunit'] = array(
+    '#type' => 'select',
+    '#title' => t('Duration unit'),
+    '#default_value' => $node->durationunit,
+    '#options' => $durationunits['values'],
+  );
+
+  $form['group3']['duration'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Duration'),
+    '#size' => 20,
+    '#default_value' => isset($node->duration) ? $node->duration : NULL,
+  );
+
+  $form['group4'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => 3,
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group4') : -16,
+  );
+
+  $pricemodes = storm_attributes_bydomain('Price mode');
+  $form['group4']['pricemode'] = array(
+    '#type' => 'select',
+    '#title' => t('Price mode'),
+    '#default_value' => $node->pricemode,
+    '#options' => array('-' => '-') + $pricemodes['values'],
+  );
+
+  $form['group4']['price'] = array(
+    '#title' => t('Price'),
+    '#type' => 'textfield',
+    '#size' => 15,
+    '#default_value' => isset($node->price) ? $node->price : NULL,
+  );
+
+  $currencies = storm_attributes_bydomain('Currency');
+  $form['group4']['currency'] = array(
+    '#type' => 'select',
+    '#title' => t('Price currency'),
+    '#default_value' => $node->currency,
+    '#options' => array('-' => '-') + $currencies['values'],
+  );
+
+  $form['group5'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group5') : -15,
+  );
+
+  $options = isset($node->project_nid) ? storm_get_assignment_options($node->organization_nid, $node->project_nid) : storm_get_assignment_options($node->organization_nid);
+
+  $form['group5']['assigned_nid'] = array(
+    '#type' => 'select',
+    '#title' => t('Assigned to'),
+    '#options' => $options,
+    '#default_value' => isset($node->assigned_nid) ? $node->assigned_nid : NULL,
+  );
+
+  $form['group6'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group6') : -14,
+  );
+
+  $form['group6']['billable'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Billable'),
+    '#default_value' => $node->billable,
+    '#weight' => 1,
+  );
+
+  $form['group6']['billed'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Billed'),
+    '#default_value' => isset($node->billed) ? $node->billed : 0,
+    '#weight' => 2,
+  );
+
+  if ($type->has_body) {
+    $form['body_field'] = node_body_field($node, $type->body_label, $type->min_word_count);
+  }
+
+  $form['title_old'] = array(
+    '#type' => 'hidden',
+    '#default_value' => isset($node->title_old) ? $node->title_old : NULL,
+  );
+
+  return $form;
+}
+
+// INSERT / UPDATE FUNCTIONS
+function stormticket_insert($node) {
+  _stormticket_beforesave($node);
+
+  db_query("INSERT INTO {stormticket}
+    (vid, nid, organization_nid, organization_title, project_nid, project_title,
+    task_nid, task_title, task_stepno, ticketcategory, ticketstatus, ticketpriority,
+    datebegin, dateend, durationunit, duration, pricemode, price, currency,
+    assigned_nid, assigned_title, billable, billed)
+    VALUES
+    (%d, %d, %d, '%s', %d, '%s',
+    %d, '%s', '%s', '%s', '%s', '%s',
+    %d, %d, '%s', %f, '%s', %f, '%s', %d, '%s', %d, %d)",
+    $node->vid, $node->nid, $node->organization_nid, $node->organization_title, $node->project_nid, $node->project_title,
+    $node->task_nid, $node->task_title, $node->task_stepno, $node->ticketcategory, $node->ticketstatus, $node->ticketpriority,
+    $node->datebegin, $node->dateend, $node->durationunit, $node->duration, $node->pricemode, $node->price, $node->currency,
+    $node->assigned_nid, $node->assigned_title, $node->billable, $node->billed
+  );
+}
+
+function stormticket_update($node) {
+  $s = "SELECT n.title FROM {node} n INNER JOIN {stormorganization} o ON n.nid=o.nid
+    WHERE type='stormorganization' AND n.nid=%d";
+  $r = db_query($s, $node->organization_nid);
+  $o = db_fetch_object($r);
+  $node->organization_title = $o->title;
+
+  $s = "SELECT n.title, p.organization_title FROM {node} n INNER JOIN {stormproject} p ON n.nid=p.nid
+    WHERE type='stormproject' AND n.nid=%d";
+  $r = db_query($s, $node->project_nid);
+  $p = db_fetch_object($r);
+  $node->project_title = $p->title;
+
+  $s = "SELECT n.title FROM {node} n INNER JOIN {stormtask} t ON n.nid=t.nid WHERE n.type='stormtask' AND n.nid=%d";
+  $r = db_query($s, $node->task_nid);
+  $ta = db_fetch_object($r);
+  $node->task_title = $ta->title;
+
+  if ($node->task_nid != $node->task_nid_old) {
+    module_invoke_all('stormticket_change_hierarchy', $node->nid, $node->organization_nid, $node->organization_title, $node->project_nid, $node->project_title, $node->task_nid, $node->task_title);
+  }
+
+  // if this is a new node or we're adding a new revision,
+  if ($node->revision) {
+    stormticket_insert($node);
+  }
+  else {
+    _stormticket_beforesave($node);
+    db_query("UPDATE {stormticket} SET
+      organization_nid=%d, organization_title='%s', project_nid=%d, project_title='%s',
+      task_nid=%d, task_title='%s', task_stepno='%s', ticketcategory='%s', ticketstatus='%s',
+      ticketpriority='%s', datebegin=%d, dateend=%d, durationunit='%s', duration=%f, pricemode='%s',
+      price=%f, currency='%s', assigned_nid=%d, assigned_title='%s', billable=%d, billed=%d WHERE vid = %d",
+      $node->organization_nid, $node->organization_title, $node->project_nid, $node->project_title,
+      $node->task_nid, $node->task_title, $node->task_stepno, $node->ticketcategory, $node->ticketstatus,
+      $node->ticketpriority, $node->datebegin, $node->dateend, $node->durationunit, $node->duration, $node->pricemode,
+      $node->price, $node->currency,
+      $node->assigned_nid, $node->assigned_title,
+      $node->billable, $node->billed, $node->vid
+    );
+    if ($node->title != $node->title_old) {
+      module_invoke_all('stormticket_change', $node->nid, $node->title);
+    }
+  }
+}
+
+function _stormticket_beforesave(&$node) {
+  $s = "SELECT n.title FROM {node} n INNER JOIN {stormorganization} o ON n.nid=o.nid
+        WHERE type='stormorganization' AND n.nid=%d";
+  $r = db_query($s, $node->organization_nid);
+  $o = db_fetch_object($r);
+  $node->organization_title = $o->title;
+
+  $s = "SELECT n.title, p.organization_title FROM {node} n INNER JOIN {stormproject} p ON n.nid=p.nid
+        WHERE type='stormproject' AND n.nid=%d";
+  $r = db_query($s, $node->project_nid);
+  $p = db_fetch_object($r);
+  $node->project_title = isset($p->title) ? $p->title : '';
+
+  $s = "SELECT title, stepno FROM {node} n INNER JOIN {stormtask} t ON n.nid=t.nid WHERE n.type='stormtask' AND n.nid=%d";
+  $r = db_query($s, $node->task_nid);
+  $ta = db_fetch_object($r);
+  $node->task_title = isset($ta->title) ? $ta->title : '';
+  $node->task_stepno = isset($ta->stepno) ? $ta->stepno : '';
+
+  $assigned = node_load($node->assigned_nid);
+  $node->assigned_title = isset($assigned->title) ? $assigned->title : '';
+
+  // Allow use of comma when inputting numerical values - str_replace with period decimal
+  $node->duration = str_replace(',', '.', $node->duration);
+  $node->price = str_replace(',', '.', $node->price);
+
+  if (is_array($node->datebegin)) $node->datebegin = _storm_date_to_gmtimestamp($node->datebegin);
+  if (is_array($node->dateend)) $node->dateend = _storm_date_to_gmtimestamp($node->dateend);
+}
+
+function stormticket_nodeapi(&$node, $op, $teaser, $page) {
+  switch ($op) {
+    case 'prepare':
+      if (!isset($node->nid)) {
+        $category_list = storm_attributes_bydomain('Ticket category');
+        $node->ticketcategory = $category_list['default'];
+
+        $status_list = storm_attributes_bydomain('Ticket status');
+        $node->ticketstatus = $status_list['default'];
+
+        $priority_list = storm_attributes_bydomain('Ticket priority');
+        $node->ticketpriority = $priority_list['default'];
+      }
+      break;
+    case 'delete revision':
+      // Notice that we're matching a single revision based on the node's vid.
+      db_query('DELETE FROM {stormticket} WHERE vid = %d', $node->vid);
+      break;
+  }
+}
+
+function stormticket_delete($node) {
+  // Notice that we're matching all revision, by using the node's nid.
+  db_query('DELETE FROM {stormticket} WHERE nid = %d', $node->nid);
+}
+
+function stormticket_load($node) {
+  $additions = db_fetch_object(db_query('SELECT * FROM {stormticket} WHERE vid = %d', $node->vid));
+  $additions->title_old = $node->title;
+  return $additions;
+}
+
+function stormticket_view($node, $teaser = FALSE, $page = FALSE) {
+  $breadcrumb = array();
+  $breadcrumb[] = l(t('Storm'), 'storm');
+  $breadcrumb[] = l(t('Tickets'), 'storm/tickets');
+  drupal_set_breadcrumb($breadcrumb);
+
+  return theme('stormticket_view', $node, $teaser, $page);
+}
+
+function stormticket_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'stormticket'),
+  );
+}
+
+// ADMIN SETTINGS
+function stormticket_admin_settings() {
+  $form = array();
+
+  $form['stormticket_billable_default'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Default Value for billable field.'),
+    '#default_value' => variable_get('stormticket_billable_default', FALSE),
+    '#description' => t('When checked, Storm will set the ticket to billable by default'),
+    '#size' => 5,
+  );
+
+  return system_settings_form($form);
+}
+
+// INVOICE AUTO ADD HANDLER
+function stormticket_storminvoice_auto_add($node, $invoice_nid = NULL) {
+  if (!module_exists('storminvoice')) {
+    drupal_set_message(t('This function should only be called from within Storm Invoice'));
+    return;
+  }
+  elseif ($node->billed) {
+    drupal_set_message(t('This ticket has already been billed!'));
+    return;
+  }
+  elseif (!$node->billable) {
+    drupal_set_message(t('This ticket is marked unbillable!'));
+    return;
+  }
+  else {
+    global $user;
+
+    if (!$invoice_nid) {
+
+      $new_invoice = new StdClass;
+
+      // Code copied with edits from node form
+      $new_invoice->requestdate = time();
+      $new_invoice->duedate = $new_invoice->requestdate + (variable_get('storminvoice_payment_days', 30) * 86400);
+      $new_invoice->number = storminvoice_get_invoice_number($new_invoice->requestdate);
+
+      $new_invoice->title = $node->title;
+      $new_invoice->uid = $user->uid;
+      $new_invoice->type = 'storminvoice';
+      // $new_invoice->reference
+      $new_invoice->organization_nid = $node->organization_nid;
+      $new_invoice->organization_title = $node->organization_title;
+      $new_invoice->project_nid = $node->project_nid;
+      $new_invoice->project_title = $node->project_title;
+      // $new_invoice->amount
+      // $new_invoice->tax
+      // $new_invoice->total
+      // $new_invoice->totalcustomercurr
+      // $new_invoice->taxexempt
+      $new_invoice->src_nid = $node->nid;
+      $new_invoice->src_vid = $node->vid;
+
+      node_save($new_invoice);
+      $invoice_nid = $new_invoice->nid;
+    }
+    else {
+      $new_invoice = node_load($invoice_nid);
+    }
+
+    $rate_array = array('pricemode_used' => '', 'rate_to_use' => 0);
+
+    $rate_array = storminvoice_get_rate($node);
+
+    $count = count($new_invoice->items);
+
+    $new_invoice->items[$count]->description = storminvoice_get_item_desc($rate_array, $node);
+
+    $new_invoice->items[$count]->amount = storminvoice_get_item_amount($rate_array, $node);
+
+    // Tax percent simply uses default at the moment
+    $new_invoice->items[$count]->tax1percent = variable_get('storm_tax1_percent', 20);
+    // $new_invoice_item->items[$count]->tax1
+    // $new_invoice_item->items[$count]->total
+    $new_invoice->items[$count]->src_nid = $node->nid;
+    $new_invoice->items[$count]->src_vid = $node->vid;
+
+    storm_taxation($new_invoice->items[$count]);
+    storminvoice_update($new_invoice);
+  }
+
+  // Mark task as billed.
+  db_query("UPDATE {stormticket} SET billed=%d WHERE vid=%d", 1, $node->vid);
+
+  return $invoice_nid;
+}
+
+/**
+ * Implementation of hook_token_list().
+ */
+function stormticket_token_list($type='all') {
+  $tokens = array();
+  if (($type == 'node') || ($type == 'all')) {
+    $tokens['node']['stormticket-organization-nid'] = t('Storm Ticket: Organization Node ID.');
+    $tokens['node']['stormticket-organization-title'] = t('Storm Ticket: Organization Title.');
+    $tokens['node']['stormticket-project-nid'] = t('Storm Ticket: Project Node ID.');
+    $tokens['node']['stormticket-project-title'] = t('Storm Ticket: Project Title.');
+    $tokens['node']['stormticket-ticketstatus'] = t('Storm Ticket: Project Status.');
+    $tokens['node']['stormticket-ticketcategory'] = t('Storm Ticket: Ticket Category.');
+    $tokens['node']['stormticket-ticketpriority'] = t('Storm Ticket: Ticket Priority.');
+    $tokens['node']['stormticket-durationunit'] = t('Storm Ticket: Ticket Duration Unit.');
+    $tokens['node']['stormticket-duration'] = t('Storm Ticket: Ticket Duration.');
+    $tokens['node']['stormticket-datebegin'] = t('Storm Ticket: Ticket Begin Date.');
+    $tokens['node']['stormticket-dateend'] = t('Storm Ticket: Ticket End Date.');
+    $tokens['node']['stormticket-billable'] = t('Storm Ticket: Ticket Billable.');
+    $tokens['node']['stormticket-billed'] = t('Storm Ticket: Ticket Billed.');
+    $tokens['node']['stormticket-price'] = t('Storm Ticket: Ticket Price.');
+    $tokens['node']['stormticket-pricemode'] = t('Storm Ticket: Ticket Price Mode.');
+    if (module_exists('stormperson')) {
+      // Assignee(s)
+      $tokens['node']['stormticket-assigned-to-email'] = t('Storm Ticket: Ticket Assignee(s) Email Address(s).');
+      $tokens['node']['stormticket-assigned-title'] = t('Storm Ticket: Ticket Assignee(s) Title(s).');
+    }
+  }
+  return $tokens;
+}
+
+/**
+ * Implementation of hook_token_values().
+ */
+function stormticket_token_values($type, $object = NULL) {
+  $values = array();
+  $node = $object;
+  if ((($type == 'node') || ($type == 'all')) && ($node->type === 'stormticket')) {
+    $values['stormticket-organization-nid'] = $node->organization_nid;
+    $values['stormticket-organization-title'] = $node->organization_title;
+    $values['stormticket-project-nid'] = $node->project_nid;
+    $values['stormticket-project-title'] = $node->project_title;
+    $values['stormticket-ticketstatus'] = $node->ticketstatus;
+    $values['stormticket-ticketpriority'] = $node->ticketpriority;
+    $values['stormticket-ticketcategory'] = $node->ticketcategory;
+    $values['stormticket-durationunit'] = $node->durationunit;
+    $values['stormticket-duration'] = $node->duration;
+    $values['stormticket-datebegin'] = format_date($node->datebegin, 'medium', '', variable_get('date_default_timezone', NULL));
+    $values['stormticket-dateend'] = format_date($node->dateend, 'medium', '', variable_get('date_default_timezone', NULL));
+    $values['stormticket-price'] = $node->price;
+    $values['stormticket-pricemode'] = $node->pricemode;
+    $values['stormticket-billable'] = $node->billable;
+    $values['stormticket-billed'] = $node->billed;
+    if (module_exists('stormperson')) {
+      // Project Assignee(s) e-mail
+      if ($node->assigned_nid) {
+        $values['stormticket-assigned-title'] = $node->assigned_title;
+        $assignees_node = node_load($node->assigned_nid);
+        // Assigned to one person
+        if ($assignees_node->type === 'stormperson') {
+          $values['stormticket-assigned-to-email'] = stormperson_primary_email($assignees_node);
+        }
+        // Assigned to a team
+        else {
+          $assignees_array = $assignees_node->members_array;
+          $assignees = array();
+          foreach ($assignees_array as $nid => $name) {
+            $assignee = node_load($nid);
+            $assignees[] = stormperson_primary_email($assignee);
+          }
+          $assigned = implode(", ", $assignees);
+          // Return comma separated list of emails
+          $values['stormticket-assigned-to-email'] = $assigned;
+        }
+      }
+      else {
+        $values['stormticket-assigned-to-email'] = NULL;
+      }
+    }
+  }
+  return $values;
+}
+
+function stormticket_storm_dashboard_links($type) {
+  $links = array();
+  if ($type == 'page' || $type == 'block') {
+    $links[] = array(
+      'theme' => 'storm_dashboard_link',
+      'title' => t('Tickets'),
+      'icon' => 'stormtickets',
+      'path' => 'storm/tickets',
+      'params' => array(),
+      'access_arguments' => 'Storm ticket: access',
+      'node_type' => 'stormticket',
+      'add_type' => 'stormticket',
+      'map' => array(),
+      'weight' => 6,
+    );
+  }
+  return $links;
+}

@@ -1,0 +1,192 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm note module
+ */
+class StormnoteTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Storm Note Functionality'),
+      'description' => t('Test the functionality of the Storm Note module'),
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormproject', 'stormtask', 'stormnote', 'stormperson');
+  }
+
+  public function testStormnoteAccess() {
+    $this->drupalGet('storm/notes');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Notes list for anonymous user'));
+
+    $basic_user = $this->drupalCreateUser();
+    $this->drupalLogin($basic_user);
+    $this->drupalGet('storm/notes');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Notes list for basic user'));
+
+    $privileged_user = $this->drupalCreateUser(array('Storm note: access'));
+    $this->drupalLogin($privileged_user);
+    $this->drupalGet('storm/notes');
+    $this->assertText(t('Notes'), t('Make sure the correct page has been displayed by checking that the title is "Notes".'));
+  }
+
+  public function testStormnoteCreate() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: add', 'Storm project: view all', 'Storm task: add', 'Storm task: view all', 'Storm note: add', 'Storm note: view all'));
+    $this->drupalLogin($user);
+
+    // Create organization and invoice
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => '1',
+    );
+    $task = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $note = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $this->drupalPost('node/add/stormtask', $task, t('Save'));
+    $this->drupalPost('node/add/stormnote', $note, t('Save'));
+
+    $this->assertText(t('Note @title has been created.', array('@title' => $note['title'])));;
+  }
+
+  public function testStormnoteList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm note: access', 'Storm note: add', 'Storm note: view all', 'Storm note: edit all', 'Storm note: delete all', 'Storm person: add'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm note: access', 'Storm note: add', 'Storm note: view of user organization', 'Storm note: edit of user organization', 'Storm note: delete of user organization'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm note: access', 'Storm note: add', 'Storm note: view own', 'Storm note: edit own', 'Storm note: delete own'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm note: access', 'Storm note: add', 'Storm note: view all', 'Storm note: edit own', 'Storm note: delete own'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    // Create organization
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    // Create notes
+    $note1 = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormnote', $note1, t('Save'));
+    $note1 = node_load(array('title' => $note1['title']));
+
+    $this->drupalLogin($userOwn);
+    $note2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+    );
+    $this->drupalPost('node/add/stormnote', $note2, t('Save'));
+    $note2 = node_load(array('title' => $note2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $note3 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org2->nid,
+    );
+    $this->drupalPost('node/add/stormnote', $note3, t('Save'));
+    $note3 = node_load(array('title' => $note3['title']));
+
+    // Test for 'Storm note: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/notes');
+
+    $this->assertLink($note1->title, 0, 'The Note appears on the list');
+    $this->assertRaw('node/'. $note1->nid .'/edit', 'The Note edit icon appears on the list');
+    $this->assertRaw('node/'. $note1->nid .'/delete', 'The Note delete icon appears on the list');
+
+    $this->assertLink($note2->title, 0, 'The Note appears on the list');
+    $this->assertRaw('node/'. $note2->nid .'/edit', 'The Note edit icon appears on the list');
+    $this->assertRaw('node/'. $note2->nid .'/delete', 'The Note delete icon appears on the list');
+
+    $this->assertLink($note3->title, 0, 'The Note appears on the list');
+    $this->assertRaw('node/'. $note3->nid .'/edit', 'The Note edit icon appears on the list');
+    $this->assertRaw('node/'. $note3->nid .'/delete', 'The Note delete icon appears on the list');
+
+    // Test for 'Storm note: view of user organization'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/notes');
+
+    $this->assertLink($note1->title, 0, 'The Note appears on the list');
+    $this->assertRaw('node/'. $note1->nid .'/edit', 'The Note edit icon appears on the list');
+    $this->assertRaw('node/'. $note1->nid .'/delete', 'The Note delete icon appears on the list');
+
+    $this->assertLink($note2->title, 0, 'The Note appears on the list');
+    $this->assertRaw('node/'. $note2->nid .'/edit', 'The Note edit icon appears on the list');
+    $this->assertRaw('node/'. $note2->nid .'/delete', 'The Note delete icon appears on the list');
+
+    $this->assertNoLink($note3->title, 'The Note does not appear on the list');
+    $this->assertNoRaw('node/'. $note3->nid .'/edit', 'The Note edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $note3->nid .'/delete', 'The Note delete icon does not appear on the list');
+
+    // Test for 'Storm note: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/notes');
+
+    $this->assertNoLink($note1->title, 'The Note does not appear on the list');
+    $this->assertNoRaw('node/'. $note1->nid .'/edit', 'The Note edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $note1->nid .'/delete', 'The Note delete icon does not appear on the list');
+
+    $this->assertLink($note2->title, 0, 'The Note appears on the list');
+    $this->assertRaw('node/'. $note2->nid .'/edit', 'The Note edit icon appears on the list');
+    $this->assertRaw('node/'. $note2->nid .'/delete', 'The Note delete icon appears on the list');
+
+    $this->assertNoLink($note3->title, 'The Note does not appear on the list');
+    $this->assertNoRaw('node/'. $note3->nid .'/edit', 'The Note edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $note3->nid .'/delete', 'The Note delete icon does not appear on the list');
+
+
+    // Test for 'Storm note: view all', 'Storm note: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/notes');
+
+    $this->assertLink($note1->title, 0, 'The Note appears on the list');
+    $this->assertNoRaw('node/'. $note1->nid .'/edit', 'The Note edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $note1->nid .'/delete', 'The Note edit icon does not appear on the list');
+
+    $this->assertLink($note2->title, 0, 'The Note appears on the list');
+    $this->assertNoRaw('node/'. $note2->nid .'/edit', 'The Note edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $note2->nid .'/delete', 'The Note delete icon does not appear on the list');
+
+    $this->assertLink($note3->title, 0, 'The Note appears on the list');
+    $this->assertRaw('node/'. $note3->nid .'/edit', 'The Note edit icon appears on the list');
+    $this->assertRaw('node/'. $note3->nid .'/delete', 'The Note delete icon appears on the list');
+
+  }
+}

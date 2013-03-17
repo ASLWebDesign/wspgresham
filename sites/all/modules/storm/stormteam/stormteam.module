@@ -1,0 +1,735 @@
+<?php
+
+/**
+ * @file
+ * Functionality for the Storm Team module
+ * Organized into the following sections:
+ * - General hooks: (help), menu, perm, theme, views_api
+ * - Node specific hooks: node_info, content_extra_fields, access, access_sql,
+ *     storm_rewrite_where_sql, form, load, view, _beforesave, insert, update,
+ *     delete, nodeapi
+ * - Page generation: list, list_filter, list_filter_filter, list_filter_reset,
+ *     autocomplete, autocomplete_combo
+ */
+
+/**
+ * @function
+ * Implementation of hook_help().
+ */
+/* function stormteam_help($path, $arg) {
+}*/
+
+/**
+ * @function
+ * Implementation of hook_menu().
+ */
+function stormteam_menu() {
+  $items = array();
+
+  $items['storm/teams'] = array(
+    'title' => 'Teams',
+    'description' => 'Storm teams',
+    'page callback' => 'stormteam_list',
+    'access arguments' => array('Storm team: access'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 2,
+  );
+
+  $items['storm/teams/autocomplete'] = array(
+    'title' => 'Teams autocomplete',
+    'page callback' => 'stormteam_autocomplete',
+    'access arguments' => array('Storm team: access'),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * @function
+ * Implementation of hook_perm().
+ */
+function stormteam_perm() {
+  return array(
+    'Storm team: access',
+    'Storm team: add',
+    'Storm team: view all',
+    'Storm team: view own',
+    'Storm team: view belonged',
+    'Storm team: edit all',
+    'Storm team: edit own',
+    'Storm team: edit belonged',
+    'Storm team: delete all',
+    'Storm team: delete own',
+    'Storm team: delete belonged',
+  );
+}
+
+/**
+ * @function
+ * Implementation of hook_theme().
+ */
+function stormteam_theme() {
+  return array(
+    'stormteam_list' => array(
+      'file'      => 'stormteam.theme.inc',
+      'arguments' => array('header', 'teams'),
+    ),
+    'stormteam_view' => array(
+      'file'      => 'stormteam.theme.inc',
+      'arguments' => array('node', 'teaser', 'page'),
+    ),
+  );
+}
+
+/**
+ * @function
+ * Implementation of hook_views_api().
+ */
+function stormteam_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'stormteam'),
+  );
+}
+
+/**
+ * @function
+ * Implementation of hook_node_info().
+ */
+function stormteam_node_info() {
+  return array(
+    'stormteam' => array(
+      'name' => t('Team'),
+      'module' => 'stormteam',
+      'description' => t('A team for use within the Storm project management application'),
+      'title_label' => t('Team Name'),
+      'body_label' => t('Description'),
+    )
+  );
+}
+
+/**
+ * @function
+ * Implementation of hook_content_extra_fields().
+ */
+function stormteam_content_extra_fields($type_name) {
+  if ($type_name == 'stormteam') {
+    return array(
+      'group1' => array('label' => 'Team members', 'weight' => -20),
+    );
+  }
+}
+
+/**
+ * @function
+ * Implementation of hook_access().
+ */
+function stormteam_access($op, $node, $account = NULL) {
+  if (empty($account)) {
+    global $user;
+    $account = $user;
+  }
+
+  if (is_numeric($node)) $node = node_load($node);
+
+  switch ($op) {
+    case 'create':
+      return user_access('Storm team: add');
+    case 'view':
+      if (user_access('Storm team: view all')) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: view own') && ($account->uid == $node->uid)) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: view belonged') && stormteam_user_belongs_to_team($node->nid, $account->stormperson_nid)) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: view belonged') && stormteam_user_belongs_to_team($node->nid, $account->stormorganization_nid)) {
+        return TRUE;
+      }
+      break;
+    case 'update':
+      if (user_access('Storm team: edit all')) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: edit own') && ($account->uid == $node->uid)) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: edit belonged') && stormteam_user_belongs_to_team($node->nid, $account->stormperson_nid)) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: edit belonged') && stormteam_user_belongs_to_team($node->nid, $account->stormorganization_nid)) {
+        return TRUE;
+      }
+      break;
+    case 'delete':
+      if (user_access('Storm team: delete all')) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: delete own') && ($account->uid == $node->uid)) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: delete belonged') && stormteam_user_belongs_to_team($node->nid, $account->stormperson_nid)) {
+        return TRUE;
+      }
+      elseif (user_access('Storm team: delete belonged') && stormteam_user_belongs_to_team($node->nid, $account->stormorganization_nid)) {
+        return TRUE;
+      }
+      break;
+  }
+  return FALSE;
+}
+
+/**
+ * @function
+ * Function to add node access rules onto database queries
+ */
+function stormteam_access_sql($sql, $where = array()) {
+  if (user_access('Storm team: view all')) {
+    $where[] = "'storm_access'='storm_access'";
+    return storm_rewrite_sql($sql, $where);
+  }
+
+  global $user;
+
+  $cond = '';
+  if (user_access('Storm team: view own')) {
+    $cond .= 'n.uid='. $user->uid;
+  }
+  if (user_access('Storm team: view belonged')) {
+    if (!empty($cond)) $cond .= ' OR ';
+    $cond .= "ste.mnid =  ". $user->stormperson_nid;
+  }
+  if (empty($cond)) $cond = '0=1';
+  $where[] = $cond;
+
+  $where[] = "'storm_access'='storm_access'";
+  return storm_rewrite_sql($sql, $where);
+}
+
+/**
+ * @function
+ * Implementation of hook_storm_rewrite_where_sql().
+ */
+function stormteam_storm_rewrite_where_sql($query, $primary_table, $account) {
+  static $conds = array();
+
+  if (isset($conds[$primary_table][$account->uid])) {
+    return $conds[$primary_table][$account->uid];
+  }
+
+  if (preg_match("/'storm_access'='storm_access'/", $query)) {
+    $cond = '';
+  }
+  else {
+    if (user_access('Storm team: view all', $account)) {
+      return '';
+    }
+
+    $cond = '';
+    if (user_access('Storm team: view own', $account)) {
+      $cond .= " ${primary_table}.uid=". $account->uid;
+
+    }
+    if (user_access('Storm team: view belonged', $account)) {
+      if ($cond) {
+        $cond .= ' OR ';
+      }
+      $cond .= "ste1.mnid = ". $account->stormperson_nid;
+    }
+    if ($cond) {
+      $cond = " WHEN 'stormteam' THEN (SELECT DISTINCT 1 FROM {stormteam} ste1 WHERE ste1.vid=${primary_table}.vid AND ($cond)) ";
+    }
+    else {
+      $cond = " WHEN 'stormteam' THEN 0 ";
+    }
+  }
+
+  $conds[$primary_table][$account->uid] = $cond;
+  return $cond;
+}
+
+/**
+ * @function
+ * Implementation of hook_form().
+ */
+function stormteam_form(&$node) {
+  $breadcrumb = array(
+    l(t('Storm'), 'storm'),
+    l(t('Teams'), 'storm/teams'),
+  );
+  drupal_set_breadcrumb($breadcrumb);
+
+  $type = node_get_types('type', $node);
+
+  $form['title'] = array(
+    '#type' => 'textfield',
+    '#title' => check_plain($type->title_label),
+    '#required' => TRUE,
+    '#default_value' => $node->title,
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'title') : -21,
+  );
+
+  $form['group1'] = array(
+    '#type' => 'markup',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group1') : -20,
+  );
+
+  $options = array(0 => '-');
+
+  $s_per = "SELECT n.nid, n.title FROM {node} n INNER JOIN {stormperson} spe ON n.vid=spe.vid WHERE n.type='stormperson' AND n.status = 1 ORDER BY n.title";
+  $s_per = stormperson_access_sql($s_per);
+  $s_per = db_rewrite_sql($s_per);
+  $r_per = db_query($s_per);
+  $people = array();
+  while ($person = db_fetch_object($r_per)) {
+    $people[$person->nid] = $person->title;
+  }
+
+  $options = $options + array(-1 => t('-PEOPLE-')) + $people;
+
+  $s_org = "SELECT n.nid, n.title FROM {node} n WHERE n.type='stormorganization' AND n.status = 1 ORDER BY n.title";
+  $s_org = stormorganization_access_sql($s_org);
+  $s_org = db_rewrite_sql($s_org);
+  $r_org = db_query($s_org);
+  $organizations = array();
+  while ($organization = db_fetch_object($r_org)) {
+    $organizations[$organization->nid] = $organization->title;
+  }
+
+  $options = $options + array(-2 => t('-ORGANIZATIONS-')) + $organizations;
+
+  $i = 1;
+  $variable = 'members_array_'. $i;
+
+  // Add rows for existing team members
+  if (isset($node->members_array) && is_array($node->members_array)) {
+    foreach ($node->members_array as $node->$variable => $name) {
+      $form['group1'][$variable] = array(
+        '#type' => 'select',
+        '#title' => t('Team Member @num', array('@num' => $i)),
+        '#options' => $options,
+        '#default_value' => $node->$variable,
+      );
+      $i++;
+      $variable = 'members_array_'. $i;
+    }
+  }
+
+  // Add placeholder rows
+  for ($j = 0; $j < 3; $j++) {
+    $variable = 'members_array_'. $i;
+    $form['group1'][$variable] = array(
+      '#type' => 'select',
+      '#title' => t('Team Member @num', array('@num' => $i)),
+      '#options' => $options,
+      '#default_value' => (isset($node->$variable)) ? $node->$variable : NULL,
+    );
+    $i++;
+  }
+
+  if ($type->has_body) {
+    $form['body_field'] = node_body_field($node, $type->body_label, $type->min_word_count);
+  }
+
+  $form['title_old'] = array(
+    '#type' => 'hidden',
+    '#default_value' => (isset($node->title_old)) ? $node-title_old : NULL,
+  );
+
+  return $form;
+}
+
+/**
+ * @function
+ * Implementation of hook_load().
+ */
+function stormteam_load($node) {
+  $result = db_query('SELECT ste.mnid, n.title, n.status FROM {stormteam} ste JOIN {node} n ON (ste.mnid = n.nid) WHERE ste.vid = %d', $node->vid);
+  $additions = new stdClass();
+  $additions->members_array = array();
+  $additions->members_deactivated_array = array();
+  while ($members = db_fetch_object($result)) {
+    $additions->members_array[$members->mnid] = $members->title;
+    if ($members->status == 0) {
+      $additions->members_deactivated_array[$members->mnid] = $members->title;
+    }
+  }
+  $additions->title_old = $node->title;
+  return $additions;
+}
+
+/**
+ * @function
+ * Implementation of hook_view().
+ */
+function stormteam_view($node, $teaser, $page) {
+  $breadcrumb = array(
+    l(t('Storm'), 'storm'),
+    l(t('Teams'), 'storm/teams'),
+  );
+  drupal_set_breadcrumb($breadcrumb);
+
+  return theme('stormteam_view', $node, $teaser, $page);
+}
+
+/**
+ * @function
+ * Function to be called internally before saving Storm Team nodes
+ */
+function _stormteam_beforesave(&$node) {
+  $i = 1;
+  $variable = 'members_array_'. $i;
+
+  while (isset($node->$variable)) {
+    $title = db_fetch_object(db_query('SELECT n.title FROM {node} AS n WHERE nid = %d', $node->$variable));
+    if (!empty($title)) {
+      $node->members_array[$node->$variable] = $title->title;
+    }
+    $i++;
+    $variable = 'members_array_'. $i;
+  }
+  if (isset($node->members_array)) {
+    if (array_key_exists(0, $node->members_array)) {
+      unset($node->members_array[0]);
+    }
+
+    $node->members = serialize($node->members_array);
+  }
+}
+
+/**
+ * @function
+ * Implementation of hook_insert().
+ */
+function stormteam_insert($node) {
+  _stormteam_beforesave($node);
+  if (isset($node->vid) && (isset($node->nid)) && (isset($node->members_array))) {
+    $member = new stdClass();
+    $member->nid = $node->nid;
+    $member->vid = $node->vid;
+    foreach ($node->members_array as $mnid => $member_name) {
+      $member->mnid = $mnid;
+      drupal_write_record('stormteam', $member);
+    }
+  }
+}
+
+/**
+ * @function
+ * Implementation of hook_update().
+ */
+function stormteam_update($node) {
+  _stormteam_beforesave($node);
+
+  if ($node->revision) {
+    stormteam_insert($node);
+  }
+  else {
+
+    if (isset($node->vid) && (isset($node->nid)) && (isset($node->members_array))) {
+      // Delete the old members
+      db_query("DELETE FROM {stormteam} WHERE nid = %d AND vid = %d", $node->nid, $node->vid);
+
+      // Insert entries
+      $member = new stdClass();
+      $member->nid = $node->nid;
+      $member->vid = $node->vid;
+      foreach ($node->members_array as $mnid => $member_name) {
+        $member->mnid = $mnid;
+        drupal_write_record('stormteam', $member);
+      }
+    }
+
+    // Invokes hook_stormteam_change so that if title has changed, other modules that have cached the title can update it.
+    if ($node->title != $node->title_old) {
+      module_invoke_all('stormteam_change', $node->nid, $node->title);
+    }
+  }
+}
+
+/**
+ * @function
+ * Implementation of hook_delete().
+ */
+function stormteam_delete($node) {
+  // Notice that we're matching all revision, by using the node's nid.
+  db_query('DELETE FROM {stormteam} WHERE nid = %d', $node->nid);
+}
+
+/**
+ * @function
+ * Implementation of hook_nodeapi().
+ */
+function stormteam_nodeapi(&$node, $op, $teaser, $page) {
+  switch ($op) {
+    case 'prepare':
+      // Place for setting parts of the $node object prior to hook_form being called
+      break;
+    case 'delete revision':
+      // Notice that we're matching a single revision based on the node's vid.
+      db_query('DELETE FROM {stormorganization} WHERE vid = %d', $node->vid);
+      break;
+  }
+}
+
+/**
+ * @function
+ * Function to display list of Storm Teams, called from hook_menu
+ */
+function stormteam_list() {
+  // Add Storm generic CSS
+  drupal_add_css(drupal_get_path('module', 'storm') .'/storm.css', 'module');
+
+  $breadcrumb = array(
+    l(t('Storm'), 'storm'),
+  );
+  drupal_set_breadcrumb($breadcrumb);
+
+  if (array_key_exists('name', $_GET)) {
+    if ($_SESSION['stormteam_list_filter']['name'] != $_GET['name']) {
+      $_SESSION['stormteam_list_filter']['name'] = $_GET['name'];
+    }
+  }
+
+  $i = new stdClass();
+  $i->type = 'stormteam';
+
+  $header = array(
+    array(
+      'data' => t('Team Name'),
+      'field' => 'n.title',
+      'sort' => 'ASC',
+    ),
+    array(
+      'data' => t('Description'),
+      'field' => 'n.body',
+      'sort' => '',
+    ),
+    array(
+      'data' => storm_icon_add_node($i, $_GET),
+      'class' => 'storm_list_operations',
+    ),
+  );
+
+  $s = "SELECT n.nid, n.title, n.type, nre.teaser, nre.format, n.uid FROM {node} AS n
+    INNER JOIN {node_revisions} AS nre ON n.vid = nre.vid
+    LEFT JOIN {stormteam} AS ste ON n.vid = ste.vid
+    WHERE n.status=1 AND n.type='stormteam'";
+
+  $where = array();
+  $args = array();
+  $filterfields = array();
+
+  if (isset($_SESSION['stormteam_list_filter']['name']) && $_SESSION['stormteam_list_filter']['name'] != '') {
+    $where[] = "LOWER(n.title) LIKE LOWER('%%%s%%')";
+    $args[] = $_SESSION['stormteam_list_filter']['name'];
+    $filterfields[] = t('Team name');
+  }
+
+  $itemsperpage = isset($_SESSION['stormteam_list_filter']['itemsperpage']) ? $_SESSION['stormteam_list_filter']['itemsperpage'] : variable_get('storm_default_items_per_page', 10);
+
+  if (count($filterfields) == 0) {
+    $filterdesc = t('Not filtered');
+  }
+  else {
+    $filterdesc = t('Filtered by !fields', array('!fields' => implode(", ", array_unique($filterfields))));
+  }
+  $filterdesc .= ' | '. t('!items items per page', array('!items' => $itemsperpage));
+
+  $o = drupal_get_form('stormteam_list_filter', $filterdesc);
+
+  $s = stormteam_access_sql($s, $where);
+  $s = db_rewrite_sql($s);
+  $tablesort = tablesort_sql($header);
+  // default count replacement doesn't work, because we need the distinct
+  $count_query = preg_replace('/SELECT.*?FROM /As', 'SELECT COUNT(DISTINCT(n.nid)) FROM ', $s);
+  $r = pager_query($s . $tablesort, $itemsperpage, 0, $count_query, $args);
+  $rows = array();
+  while ($team = db_fetch_object($r)) {
+    $rows[] = array(
+      l($team->title, 'node/'. $team->nid),
+      check_markup($team->teaser),
+      array(
+        'data' => storm_icon_edit_node($team, $_GET) .'&nbsp;'. storm_icon_delete_node($team, $_GET),
+        'class' => 'storm_list_operations',
+      ),
+    );
+  }
+
+  $o .= theme('table', $header, $rows);
+  $o .= theme('pager', NULL, $itemsperpage, 0);
+  print theme('page', $o);
+}
+
+/**
+ * @function
+ * Function to define form for setting Storm Team list filter.
+ */
+function stormteam_list_filter(&$form_state, $filterdesc = 'Filter') {
+  $name = isset($_SESSION['stormteam_list_filter']['name']) ? $_SESSION['stormteam_list_filter']['name'] : '';
+
+  $itemsperpage = isset($_SESSION['stormteam_list_filter']['itemsperpage']) ? $_SESSION['stormteam_list_filter']['itemsperpage'] : variable_get('storm_default_items_per_page', 10);
+  $_SESSION['stormteam_list_filter']['itemsperpage'] = $itemsperpage;
+
+  $form = array();
+
+  $form['filter'] = array(
+    '#type' => 'fieldset',
+    '#title' => $filterdesc,
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#weight' => -20,
+  );
+
+  $form['filter']['name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Name'),
+    '#default_value' => $name,
+    '#autocomplete_path' => 'storm/teams/autocomplete',
+  );
+
+  $form['filter']['group1'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+  );
+
+  $form['filter']['group1']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Filter'),
+    '#submit' => array('stormteam_list_filter_filter'),
+  );
+
+  $form['filter']['group1']['reset'] = array(
+    '#type' => 'submit',
+    '#value' => t('Reset'),
+    '#submit' => array('stormteam_list_filter_reset'),
+  );
+
+  $form['filter']['group1']['itemsperpage'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Items'),
+    '#size' => 10,
+    '#default_value' => $itemsperpage,
+    '#prefix' => '<div class="container-inline">',
+    '#suffix' => '</div>',
+  );
+
+  return $form;
+}
+
+/**
+ * @function
+ * Function to define submit handler in form for setting Storm Team list filter.
+ */
+function stormteam_list_filter_filter($form, &$form_state) {
+  $_SESSION['stormteam_list_filter']['name'] = $form_state['values']['name'];
+  $_SESSION['stormteam_list_filter']['itemsperpage'] = $form_state['values']['itemsperpage'];
+}
+
+/**
+ * @function
+ * Function to define reset handler in form for setting Storm Team list filter
+ */
+function stormteam_list_filter_reset($form, &$form_state) {
+  unset($_SESSION['stormteam_list_filter']);
+}
+
+/**
+ * @function
+ * Function to return an autocomplete list for Storm Teams
+ */
+function stormteam_autocomplete($string = '') {
+  $matches = array();
+  if ($string) {
+    $s = "SELECT title FROM {node} AS n WHERE n.type='stormteam' AND LOWER(title) LIKE LOWER('%%%s%%')";
+    $s = stormteam_access_sql($s);
+    $s = db_rewrite_sql($s);
+
+    $result = db_query_range($s, $string, 0, 10);
+    while ($team = db_fetch_object($result)) {
+      $matches[$team->title] = check_plain($team->title);
+    }
+  }
+
+  drupal_json($matches);
+}
+
+/**
+ * @function
+ * Function to return an autocomplete list for Storm Teams and People
+ */
+function stormteam_autocomplete_combo($string = '') {
+  $matches = array();
+  if ($string) {
+    // TO BE COMPLETED
+    $s = "SELECT title FROM {node} AS n WHERE n.type='stormteam' AND LOWER(title) LIKE LOWER('%s%%')";
+    $s = stormteam_access_sql($s);
+    $s = db_rewrite_sql($s);
+
+    $result = db_query_range($s, $string, 0, 10);
+    while ($obj = db_fetch_object($result)) {
+      $matches[$obj->title] = check_plain($obj->title);
+    }
+  }
+
+  drupal_json($matches);
+}
+
+/**
+ * @function
+ * Returns whether user is in a Storm team based on team $node and user $account
+ */
+function stormteam_user_belongs_to_team($team, $person_or_organization_nid) {
+  $node = node_load($team);
+
+  // Check for person_or_organization_nid in the team members array and return TRUE / FALSE
+  if (is_array($node->members_array)) {
+    return array_key_exists($person_or_organization_nid, $node->members_array);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * @function
+ * Function to return the teams that a user is a member of
+ */
+function stormteam_user_return_teams($account = NULL) {
+  if (empty($account)) {
+    global $user;
+    $account = $user;
+  }
+
+  // Get the list of team nodes. Include organizations which the person is a member of.
+  $s = "SELECT ste.nid FROM {stormteam} ste JOIN {stormperson} stp ON (stp.nid = ste.mnid OR stp.organization_nid = ste.mnid) WHERE stp.user_uid = %d";
+  $r = db_query($s, $account->uid);
+  $teams = array();
+  while ($team = db_fetch_object($r)) {
+    $teams[] = $team->nid;
+  }
+
+  return $teams;
+}
+
+function stormteam_storm_dashboard_links($type) {
+  $links = array();
+  if ($type == 'page' || $type == 'block') {
+    $links[] = array(
+      'theme' => 'storm_dashboard_link',
+      'title' => t('Teams'),
+      'icon' => 'stormteams',
+      'path' => 'storm/teams',
+      'params' => array(),
+      'access_arguments' => 'Storm team: access',
+      'node_type' => 'stormteam',
+      'add_type' => 'stormteam',
+      'map' => array(),
+      'weight' => 3,
+    );
+  }
+  return $links;
+}

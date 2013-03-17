@@ -1,0 +1,376 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm Project module
+ */
+class StormprojectTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Storm Project Functionality'),
+      'description' => t('Test the functionality of the Storm Project module'),
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormproject', 'stormperson', 'stormteam');
+  }
+
+  public function testStormprojectAccess() {
+    $this->drupalGet('storm/projects');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Projects list for anonymous user'));
+
+    $basic_user = $this->drupalCreateUser();
+    $this->drupalLogin($basic_user);
+    $this->drupalGet('storm/projects');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Projects list for basic user'));
+
+    $privileged_user = $this->drupalCreateUser(array('Storm project: access'));
+    $this->drupalLogin($privileged_user);
+    $this->drupalGet('storm/projects');
+    $this->assertText(t('Projects'), t('Make sure the correct page has been displayed by checking that the title is "Projects".'));
+  }
+
+  public function testStormprojectCreate() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: add', 'Storm project: view all'));
+    $this->drupalLogin($user);
+
+    // Create organization and invoice
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => '1',
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+
+    $this->assertText(t('Project @title has been created.', array('@title' => $prj['title'])));;
+  }
+
+  public function testStormprojectList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: access', 'Storm project: add', 'Storm project: view all', 'Storm project: edit all', 'Storm project: delete all', 'Storm person: add', 'Storm team: add', 'Storm person: view all', 'Storm team: view all'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: access', 'Storm project: add', 'Storm project: view of user organization', 'Storm project: edit of user organization', 'Storm project: delete of user organization'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: access', 'Storm project: add', 'Storm project: view own', 'Storm project: edit own', 'Storm project: delete own'));
+    $userManager = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: access', 'Storm project: add', 'Storm project: view if project manager', 'Storm project: edit if project manager', 'Storm project: delete if project manager'));
+    $userAssigned = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: access', 'Storm project: add', 'Storm project: view if assigned to project', 'Storm project: edit if assigned to project', 'Storm project: delete if assigned to project'));
+    $userAssignedTeam = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: access', 'Storm project: add', 'Storm project: view if assigned to project', 'Storm project: edit if assigned to project', 'Storm project: delete if assigned to project'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: access', 'Storm project: add', 'Storm project: view all', 'Storm project: edit own', 'Storm project: delete own'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    // Create organization
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userManager->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+    $manager = node_load(array('title' => $personOrg['title']));
+
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userAssigned->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+    $assignedPerson = node_load(array('title' => $personOrg['title']));
+
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userAssignedTeam->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+    $assignedPersonTeam = node_load(array('title' => $personOrg['title']));
+
+    $team = array(
+      'title' => $this->randomName(32),
+      'members_array_1' => $assignedPersonTeam->nid,
+    );
+    $this->drupalPost('node/add/stormteam', $team, t('Save'));
+    $team = node_load(array('title' => $team['title']));
+
+    // Create project
+    $project1 = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormproject', $project1, t('Save'));
+    $project1 = node_load(array('title' => $project1['title']));
+
+    $projectManager = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'manager_nid' => $manager->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $projectManager, t('Save'));
+    $projectManager = node_load(array('title' => $projectManager['title']));
+
+    $projectAssigned = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'assigned_nid' => $assignedPerson->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $projectAssigned, t('Save'));
+    $projectAssigned = node_load(array('title' => $projectAssigned['title']));
+
+    $projectAssignedTeam = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'assigned_nid' => $team->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $projectAssignedTeam, t('Save'));
+    $projectAssignedTeam = node_load(array('title' => $projectAssignedTeam['title']));
+
+    $this->drupalLogin($userOwn);
+    $project2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $project2, t('Save'));
+    $project2 = node_load(array('title' => $project2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $project3 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org2->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $project3, t('Save'));
+    $project3 = node_load(array('title' => $project3['title']));
+
+    // Test for 'Storm project: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/projects');
+
+    $this->assertLink($project1->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $project1->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $project1->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($project2->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $project2->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $project2->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($project3->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $project3->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $project3->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($projectManager->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectManager->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectManager->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($projectAssigned->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectAssigned->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectAssigned->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($projectAssignedTeam->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectAssignedTeam->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectAssignedTeam->nid .'/delete', 'The Project delete icon appears on the list');
+
+    // Test for 'Storm project: view of user organization'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/projects');
+
+    $this->assertLink($project1->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $project1->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $project1->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($project2->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $project2->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $project2->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertNoLink($project3->title, 0, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($projectManager->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectManager->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectManager->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($projectAssigned->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectAssigned->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectAssigned->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($projectAssignedTeam->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectAssignedTeam->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectAssignedTeam->nid .'/delete', 'The Project delete icon appears on the list');
+
+    // Test for 'Storm project: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/projects');
+
+    $this->assertNoLink($project1->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($project2->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $project2->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $project2->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertNoLink($project3->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($projectManager->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectManager->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectManager->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($projectAssigned->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssigned->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssigned->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($projectAssignedTeam->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssignedTeam->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssignedTeam->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    // Test for 'Storm project: view all', 'Storm project: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/projects');
+
+    $this->assertLink($project1->title, 0, 'The Project appears on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($project2->title, 0, 'The Project appears on the list');
+    $this->assertNoRaw('node/'. $project2->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project2->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($project3->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $project3->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $project3->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertLink($projectManager->title, 0, 'The Project appears on the list');
+    $this->assertNoRaw('node/'. $projectManager->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectManager->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($projectAssigned->title, 0, 'The Project appears on the list');
+    $this->assertNoRaw('node/'. $projectAssigned->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssigned->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($projectAssignedTeam->title, 0, 'The Project appears on the list');
+    $this->assertNoRaw('node/'. $projectAssignedTeam->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssignedTeam->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    // Test for 'Storm project: view if project manager'
+    $this->drupalLogin($userManager);
+    $this->drupalGet('storm/projects');
+
+    $this->assertNoLink($project1->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($project2->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project2->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project2->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($project3->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($projectManager->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectManager->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectManager->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertNoLink($projectAssigned->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssigned->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssigned->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($projectAssignedTeam->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssignedTeam->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssignedTeam->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    // Test for 'Storm project: view if assigned to project'
+    $this->drupalLogin($userAssigned);
+    $this->drupalGet('storm/projects');
+
+    $this->assertNoLink($project1->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($project2->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project2->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project2->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($project3->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($projectManager->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectManager->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectManager->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($projectAssigned->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectAssigned->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectAssigned->nid .'/delete', 'The Project delete icon appears on the list');
+
+    $this->assertNoLink($projectAssignedTeam->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssignedTeam->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssignedTeam->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    // Test for 'Storm project: view if assigned to project' (using team)
+    $this->drupalLogin($userAssignedTeam);
+    $this->drupalGet('storm/projects');
+
+    $this->assertNoLink($project1->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project1->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($project2->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project2->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project2->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($project3->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $project3->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($projectManager->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectManager->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectManager->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertNoLink($projectAssigned->title, 'The Project does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssigned->nid .'/edit', 'The Project edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $projectAssigned->nid .'/delete', 'The Project delete icon does not appear on the list');
+
+    $this->assertLink($projectAssignedTeam->title, 0, 'The Project appears on the list');
+    $this->assertRaw('node/'. $projectAssignedTeam->nid .'/edit', 'The Project edit icon appears on the list');
+    $this->assertRaw('node/'. $projectAssignedTeam->nid .'/delete', 'The Project delete icon appears on the list');
+  }
+}

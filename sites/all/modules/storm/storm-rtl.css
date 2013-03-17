@@ -1,0 +1,145 @@
+
+table.formgroup tr td {
+padding-right: 0px;
+padding-left: 5px;
+}
+
+th.storm_list_operations {
+text-align: left;
+}
+
+td.storm_list_operations {
+text-align: left;
+}
+
+div.storm_popup_title {
+float: right;
+}
+
+ul.storm_quick_shortcuts li {
+float: right;
+margin: 0 0 1pt 1pt;
+}
+
+div.stormdashboard {
+float: right;
+}
+
+dt.stormcomponent {
+padding-right: 40px;
+}
+
+dt.stormcomponent a {
+margin-left: 5px;
+}
+
+dt#stormorganizations {
+background: transparent url(images/organizations.png) no-repeat top right;
+}
+
+dt#stormprojects {
+background: transparent url(images/projects.png) no-repeat top right;
+}
+
+dt#stormtasks {
+background: transparent url(images/tasks.png) no-repeat top right;
+}
+
+dt#stormtickets {
+background: transparent url(images/tickets.png) no-repeat top right;
+}
+
+dt#stormpeople {
+background: transparent url(images/people.png) no-repeat top right;
+}
+
+dt#stormteammembers {
+background: transparent url(images/teammembers.png) no-repeat top right;
+}
+
+dt#stormknowledgebase {
+background: transparent url(images/knowledgebase.png) no-repeat top right;
+}
+
+dt#stormtimetrackings {
+background: transparent url(images/timetrackings.png) no-repeat top right;
+}
+
+dt#stormnotes {
+background: transparent url(images/notes.png) no-repeat top right;
+}
+
+dt#storminvoices {
+background: transparent url(images/invoices.png) no-repeat top right;
+}
+
+dt#stormexpenses {
+background: transparent url(images/expenses.png) no-repeat top right;
+}
+
+dt#stormattributes {
+background: transparent url(images/attributes.png) no-repeat top right;
+}
+
+dt#stormconfiguration {
+background: transparent url(images/configuration.png) no-repeat top right;
+}
+
+div.stormcomponent {
+overflow: hidden;
+}
+
+div.stormcomponent #fields {
+float: right;
+}
+
+div.stormcomponent #fields div.label{
+float: right;
+text-align: left;
+clear: right;
+}
+
+div.stormcomponent #fields div.value {
+float: right;
+margin-right: 4px;
+}
+
+div.stormcomponent #links {
+float: left;
+}
+
+div.stormcomponent #links div {
+padding-right: 34px;
+}
+
+div.stormcomponent div.projects {
+background: transparent url(images/projects.png) no-repeat top right;
+}
+
+div.stormcomponent div.people {
+background: transparent url(images/people.png) no-repeat top right;
+}
+
+div.stormcomponent div.tickets {
+background: transparent url(images/tickets.png) no-repeat top right;
+}
+
+div.stormcomponent div.invoices {
+background: transparent url(images/invoices.png) no-repeat top right;
+}
+
+div.stormcomponent div.notes {
+background: transparent url(images/notes.png) no-repeat top right;
+}
+
+div.stormcomponent div.timetrackings {
+background: transparent url(images/timetrackings.png) no-repeat top right;
+}
+
+div.stormcomponent div.print_html {
+background: transparent url(images/html.png) no-repeat top right;
+}
+
+div.stormcomponent div.print_pdf {
+background: transparent url(images/pdf.png) no-repeat top right;
+}

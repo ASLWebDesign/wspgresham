@@ -1,0 +1,75 @@
+<?php
+
+/**
+ * @file
+ */
+
+function stormnote_install() {
+  drupal_install_schema('stormnote');
+  variable_set('node_options_stormnote', array('status'));
+}
+
+function stormnote_disable() {
+  drupal_set_message(t('Nodes of type "Note" have not been deleted on disabling Storm Note. Please note that they will now have reduced functionality, and will not be protected by Storm Note access controls.'), 'warning');
+}
+
+function stormnote_uninstall() {
+  drupal_uninstall_schema('stormnote');
+}
+
+function stormnote_schema() {
+  $schema['stormnote'] = array(
+    'fields'                => array(
+      'vid'                 => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'nid'                 => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'organization_nid'    => array('type' => 'int'),
+      'organization_title'  => array('type' => 'varchar', 'length' => 128),
+      'project_nid'         => array('type' => 'int'),
+      'project_title'       => array('type' => 'varchar', 'length' => 128),
+      'task_nid'            => array('type' => 'int'),
+      'task_title'          => array('type' => 'varchar', 'length' => 128),
+    ),
+    'primary key' => array('vid'),
+    'indexes'     => array(
+      'nid'               => array('nid'),
+      'organization_nid'  => array('organization_nid'),
+      'project_nid'       => array('project_nid'),
+      'task_nid'          => array('task_nid'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * @function
+ * Update function to remove task_stepno field from stormnote table
+ */
+function stormnote_update_6101() {
+  $ret = array();
+
+  db_drop_field($ret, 'stormnote', 'task_stepno');
+
+  return $ret;
+}
+
+/**
+ * Improve primary keys and indexes
+ */
+function stormnote_update_6201() {
+  $return = array();
+  db_drop_primary_key($return, 'stormnote');
+  db_add_primary_key($return, 'stormnote', array('vid'));
+
+  $indexes = array(
+    'nid'               => array('nid'),
+    'organization_nid'  => array('organization_nid'),
+    'project_nid'       => array('project_nid'),
+    'task_nid'          => array('task_nid'),
+  );
+  foreach ($indexes as $name => $fields) {
+    db_add_index($return, 'stormnote', $name, $fields);
+  }
+  return $return;
+}
+

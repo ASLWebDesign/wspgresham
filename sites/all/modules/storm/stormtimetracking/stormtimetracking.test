@@ -1,0 +1,182 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm Timetracking module.
+ */
+class StormtimetrackingTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Storm Timetracking Functionality'),
+      'description' => t('Test the functionality of the Storm Timetracking module'),
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormproject', 'stormtask', 'stormticket', 'stormtimetracking', 'stormperson');
+  }
+
+  public function testStormtimetrackingCreate() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: add', 'Storm project: view all', 'Storm task: add', 'Storm task: view all', 'Storm ticket: add', 'Storm ticket: view all', 'Storm timetracking: add', 'Storm timetracking: view all'));
+    $this->drupalLogin($user);
+
+    // Create organization and invoice
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => '1',
+    );
+    $task = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $ticket = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $timetracking = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $this->drupalPost('node/add/stormtask', $task, t('Save'));
+    $this->drupalPost('node/add/stormticket', $ticket, t('Save'));
+    $this->drupalPost('node/add/stormtimetracking', $timetracking, t('Save'));
+
+    $this->assertText(t('Timetracking @title has been created.', array('@title' => $timetracking['title'])));;
+  }
+
+  public function testStormtimetrackingList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm timetracking: access', 'Storm timetracking: add', 'Storm timetracking: view all', 'Storm timetracking: edit all', 'Storm timetracking: delete all', 'Storm person: add'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm timetracking: access', 'Storm timetracking: add', 'Storm timetracking: view of user organization', 'Storm timetracking: edit of user organization', 'Storm timetracking: delete of user organization'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm timetracking: access', 'Storm timetracking: add', 'Storm timetracking: view own', 'Storm timetracking: edit own', 'Storm timetracking: delete own'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm timetracking: access', 'Storm timetracking: add', 'Storm timetracking: view all', 'Storm timetracking: edit own', 'Storm timetracking: delete own'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    // Create organization
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    // Create timetrackings
+    $timetracking1 = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormtimetracking', $timetracking1, t('Save'));
+    $timetracking1 = node_load(array('title' => $timetracking1['title']));
+
+    $this->drupalLogin($userOwn);
+    $timetracking2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+    );
+    $this->drupalPost('node/add/stormtimetracking', $timetracking2, t('Save'));
+    $timetracking2 = node_load(array('title' => $timetracking2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $timetracking3 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org2->nid,
+    );
+    $this->drupalPost('node/add/stormtimetracking', $timetracking3, t('Save'));
+    $timetracking3 = node_load(array('title' => $timetracking3['title']));
+
+    // Test for 'Storm timetracking: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/timetrackings');
+
+    $this->assertLink($timetracking1->title, 0, 'The Timetracking appears on the list');
+    $this->assertRaw('node/'. $timetracking1->nid .'/edit', 'The Timetracking edit icon appears on the list');
+    $this->assertRaw('node/'. $timetracking1->nid .'/delete', 'The Timetracking delete icon appears on the list');
+
+    $this->assertLink($timetracking2->title, 0, 'The Timetracking appears on the list');
+    $this->assertRaw('node/'. $timetracking2->nid .'/edit', 'The Timetracking edit icon appears on the list');
+    $this->assertRaw('node/'. $timetracking2->nid .'/delete', 'The Timetracking delete icon appears on the list');
+
+    $this->assertLink($timetracking3->title, 0, 'The Timetracking appears on the list');
+    $this->assertRaw('node/'. $timetracking3->nid .'/edit', 'The Timetracking edit icon appears on the list');
+    $this->assertRaw('node/'. $timetracking3->nid .'/delete', 'The Timetracking delete icon appears on the list');
+
+    // Test for 'Storm timetracking: view of user organization'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/timetrackings');
+
+    $this->assertLink($timetracking1->title, 0, 'The Timetracking appears on the list');
+    $this->assertRaw('node/'. $timetracking1->nid .'/edit', 'The Timetracking edit icon appears on the list');
+    $this->assertRaw('node/'. $timetracking1->nid .'/delete', 'The Timetracking delete icon appears on the list');
+
+    $this->assertLink($timetracking2->title, 0, 'The Timetracking appears on the list');
+    $this->assertRaw('node/'. $timetracking2->nid .'/edit', 'The Timetracking edit icon appears on the list');
+    $this->assertRaw('node/'. $timetracking2->nid .'/delete', 'The Timetracking delete icon appears on the list');
+
+    $this->assertNoLink($timetracking3->title, 'The Timetracking does not appear on the list');
+    $this->assertNoRaw('node/'. $timetracking3->nid .'/edit', 'The Timetracking edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $timetracking3->nid .'/delete', 'The Timetracking delete icon does not appear on the list');
+
+    // Test for 'Storm timetracking: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/timetrackings');
+
+    $this->assertNoLink($timetracking1->title, 'The Timetracking does not appear on the list');
+    $this->assertNoRaw('node/'. $timetracking1->nid .'/edit', 'The Timetracking edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $timetracking1->nid .'/delete', 'The Timetracking delete icon does not appear on the list');
+
+    $this->assertLink($timetracking2->title, 0, 'The Timetracking appears on the list');
+    $this->assertRaw('node/'. $timetracking2->nid .'/edit', 'The Timetracking edit icon appears on the list');
+    $this->assertRaw('node/'. $timetracking2->nid .'/delete', 'The Timetracking delete icon appears on the list');
+
+    $this->assertNoLink($timetracking3->title, 'The Timetracking does not appear on the list');
+    $this->assertNoRaw('node/'. $timetracking3->nid .'/edit', 'The Timetracking edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $timetracking3->nid .'/delete', 'The Timetracking delete icon does not appear on the list');
+
+
+    // Test for 'Storm timetracking: view all', 'Storm timetracking: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/timetrackings');
+
+    $this->assertLink($timetracking1->title, 0, 'The Timetracking appears on the list');
+    $this->assertNoRaw('node/'. $timetracking1->nid .'/edit', 'The Timetracking edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $timetracking1->nid .'/delete', 'The Timetracking edit icon does not appear on the list');
+
+    $this->assertLink($timetracking2->title, 0, 'The Timetracking appears on the list');
+    $this->assertNoRaw('node/'. $timetracking2->nid .'/edit', 'The Timetracking edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $timetracking2->nid .'/delete', 'The Timetracking delete icon does not appear on the list');
+
+    $this->assertLink($timetracking3->title, 0, 'The Timetracking appears on the list');
+    $this->assertRaw('node/'. $timetracking3->nid .'/edit', 'The Timetracking edit icon appears on the list');
+    $this->assertRaw('node/'. $timetracking3->nid .'/delete', 'The Timetracking delete icon appears on the list');
+
+  }
+}

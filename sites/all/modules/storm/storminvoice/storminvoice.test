@@ -1,0 +1,225 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm Invoice module.
+ */
+class StorminvoiceTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Storm Invoice Functionality'),
+      'description' => t('Test the functionality of the Storm Invoice module'),
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormproject', 'storminvoice', 'stormperson');
+  }
+
+  public function testStorminvoiceAccess() {
+    $this->drupalGet('storm/invoices');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Invoices list for anonymous user'));
+
+    $basic_user = $this->drupalCreateUser();
+    $this->drupalLogin($basic_user);
+    $this->drupalGet('storm/invoices');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Invoices list for basic user'));
+
+    $privileged_user = $this->drupalCreateUser(array('Storm invoice: access'));
+    $this->drupalLogin($privileged_user);
+    $this->drupalGet('storm/invoices');
+    $this->assertText(t('Invoices'), t('Make sure the correct page has been displayed by checking that the title is "Invoices".'));
+  }
+
+  public function testStorminvoiceCreate() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm invoice: add', 'Storm invoice: view all'));
+    $this->drupalLogin($user);
+
+    // Create organization and invoice
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $inv = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => '1',
+      'items_0_description' => $this->randomName(32),
+      'items_0_amount' => '.28',
+      'items_0_tax1app' => '1',
+      'items_0_tax1percent' => '5',
+      'items_0_tax2app' => '2',
+      'items_0_tax2percent' => '7.5',
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $this->drupalPost('node/add/storminvoice', $inv, t('Save'));
+
+    $this->assertText(t('Invoice @title has been created.', array('@title' => $inv['title'])));
+  }
+
+  public function testStorminvoiceList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm invoice: access', 'Storm invoice: add', 'Storm invoice: view all', 'Storm invoice: edit all', 'Storm invoice: delete all', 'Storm person: add'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm invoice: access', 'Storm invoice: add', 'Storm invoice: view of user organization', 'Storm invoice: edit of user organization', 'Storm invoice: delete of user organization'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm invoice: access', 'Storm invoice: add', 'Storm invoice: view own', 'Storm invoice: edit own', 'Storm invoice: delete own'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm invoice: access', 'Storm invoice: add', 'Storm invoice: view all', 'Storm invoice: edit own', 'Storm invoice: delete own'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    // Create organization
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    // Create invoices
+    $inv1 = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org->nid,
+      'items_0_description' => $this->randomName(32),
+      'items_0_amount' => '100.0',
+      'items_0_tax1app' => '1',
+      'items_0_tax1percent' => '20',
+      'items_0_tax2app' => '2',
+      'items_0_tax2percent' => '10',
+    );
+    // tax1: 20; tax2: 12; total: 132
+    $this->drupalPost('node/add/storminvoice', $inv1, t('Save'));
+    $inv1 = node_load(array('title' => $inv1['title']));
+
+    $this->drupalLogin($userOwn);
+    $inv2 = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org->nid,
+      'items_0_description' => $this->randomName(32),
+      'items_0_amount' => '200',
+      'items_0_tax1app' => '1',
+      'items_0_tax1percent' => '20',
+      'items_0_tax2app' => '0',
+      'items_0_tax2percent' => '10',
+    );
+    // tax1: 40; tax2: 0; total: 240
+    $this->drupalPost('node/add/storminvoice', $inv2, t('Save'));
+    $inv2 = node_load(array('title' => $inv2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $inv3 = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org2->nid,
+      'items_0_description' => $this->randomName(32),
+      'items_0_amount' => '42,42',
+      'items_0_tax1app' => '0',
+      'items_0_tax1percent' => '5',
+      'items_0_tax2app' => '0',
+      'items_0_tax2percent' => '7.5',
+    );
+    // tax1: 0, tax2: 0; total: 42.42
+    $this->drupalPost('node/add/storminvoice', $inv3, t('Save'));
+    $inv3 = node_load(array('title' => $inv3['title']));
+
+    // Test for 'Storm invoice: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/invoices');
+
+    $this->assertLink($inv1->title, 0, 'The Invoice appears on the list');
+    $this->assertRaw('node/'. $inv1->nid .'/edit', 'The Invoice edit icon appears on the list');
+    $this->assertRaw('node/'. $inv1->nid .'/delete', 'The Invoice edit icon appears on the list');
+
+    $this->assertLink($inv2->title, 0, 'The Invoice appears on the list');
+    $this->assertRaw('node/'. $inv2->nid .'/edit', 'The Invoice edit icon appears on the list');
+    $this->assertRaw('node/'. $inv2->nid .'/delete', 'The Invoice edit icon appears on the list');
+
+    $this->assertLink($inv3->title, 0, 'The Invoice appears on the list');
+    $this->assertRaw('node/'. $inv3->nid .'/edit', 'The Invoice edit icon appears on the list');
+    $this->assertRaw('node/'. $inv3->nid .'/delete', 'The Invoice edit icon appears on the list');
+
+    $this->assertRaw('342.42', 'Total amount is correct.');
+    $this->assertRaw('60.00', 'Total Tax1 is correct.');
+    $this->assertRaw('12.00', 'Total Tax2 is correct.');
+    $this->assertRaw('414.42', 'Total sum correct.');
+
+    // Test for 'Storm invoice: view of user organization'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/invoices');
+
+    $this->assertLink($inv1->title, 0, 'The Invoice appears on the list');
+    $this->assertRaw('node/'. $inv1->nid .'/edit', 'The Invoice edit icon appears on the list');
+    $this->assertRaw('node/'. $inv1->nid .'/delete', 'The Invoice edit icon appears on the list');
+
+    $this->assertLink($inv2->title, 0, 'The Invoice appears on the list');
+    $this->assertRaw('node/'. $inv2->nid .'/edit', 'The Invoice edit icon appears on the list');
+    $this->assertRaw('node/'. $inv2->nid .'/delete', 'The Invoice edit icon appears on the list');
+
+    $this->assertNoLink($inv3->title, 'The Invoice does not appear on the list');
+    $this->assertNoRaw('node/'. $inv3->nid .'/edit', 'The Invoice edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $inv3->nid .'/delete', 'The Invoice edit icon does not appear on the list');
+
+    $this->assertRaw('300.00', 'Total amount is correct.');
+    $this->assertRaw('60.00', 'Total Tax1 is correct.');
+    $this->assertRaw('12.00', 'Total Tax2 is correct.');
+    $this->assertRaw('372.00', 'Total sum correct.');
+
+    // Test for 'Storm invoice: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/invoices');
+
+    $this->assertNoLink($inv1->title, 'The Invoice does not appear on the list');
+    $this->assertNoRaw('node/'. $inv1->nid .'/edit', 'The Invoice edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $inv1->nid .'/delete', 'The Invoice edit icon does not appear on the list');
+
+    $this->assertLink($inv2->title, 0, 'The Invoice appears on the list');
+    $this->assertRaw('node/'. $inv2->nid .'/edit', 'The Invoice edit icon appears on the list');
+    $this->assertRaw('node/'. $inv2->nid .'/delete', 'The Invoice edit icon appears on the list');
+
+    $this->assertNoLink($inv3->title, 'The Invoice does not appear on the list');
+    $this->assertNoRaw('node/'. $inv3->nid .'/edit', 'The Invoice edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $inv3->nid .'/delete', 'The Invoice edit icon does not appear on the list');
+
+    $this->assertRaw('200.00', 'Total amount is correct.');
+    $this->assertRaw('40.00', 'Total Tax1 is correct.');
+    $this->assertRaw('0.00', 'Total Tax2 is correct.');
+    $this->assertRaw('240.00', 'Total sum correct.');
+
+    // Test for 'Storm invoice: view all', 'Storm invoice: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/invoices');
+
+    $this->assertLink($inv1->title, 0, 'The Invoice appears on the list');
+    $this->assertNoRaw('node/'. $inv1->nid .'/edit', 'The Invoice edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $inv1->nid .'/delete', 'The Invoice edit icon does not appear on the list');
+
+    $this->assertLink($inv2->title, 0, 'The Invoice appears on the list');
+    $this->assertNoRaw('node/'. $inv2->nid .'/edit', 'The Invoice edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $inv2->nid .'/delete', 'The Invoice edit icon does not appear on the list');
+
+    $this->assertLink($inv3->title, 0, 'The Invoice appears on the list');
+    $this->assertRaw('node/'. $inv3->nid .'/edit', 'The Invoice edit icon appears on the list');
+    $this->assertRaw('node/'. $inv3->nid .'/delete', 'The Invoice edit icon appears on the list');
+
+    $this->assertRaw('342.42', 'Total amount is correct.');
+    $this->assertRaw('60.00', 'Total Tax1 is correct.');
+    $this->assertRaw('12.00', 'Total Tax2 is correct.');
+    $this->assertRaw('414.42', 'Total sum correct.');
+
+  }
+}

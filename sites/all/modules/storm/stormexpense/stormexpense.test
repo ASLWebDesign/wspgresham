@@ -1,0 +1,191 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm expense module
+ */
+class StormexpenseTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Storm Expense Functionality'),
+      'description' => t('Test the functionality of the Storm Expense module'),
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormproject', 'stormtask', 'stormticket', 'stormexpense', 'stormperson');
+  }
+
+  public function testStormexpenseAccess() {
+    $this->drupalGet('storm/expenses');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Expense list for anonymous user'));
+
+    $basic_user = $this->drupalCreateUser();
+    $this->drupalLogin($basic_user);
+    $this->drupalGet('storm/expenses');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Expense list for basic user'));
+
+    $privileged_user = $this->drupalCreateUser(array('Storm expense: access'));
+    $this->drupalLogin($privileged_user);
+    $this->drupalGet('storm/expenses');
+    $this->assertText(t('Expenses'), t('Make sure the correct page has been displayed by checking that the title is "Expenses".'));
+  }
+
+  public function testStormexpenseCreate() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm expense: add', 'Storm expense: view all', 'Storm project: view all', 'Storm task: view all'));
+    $this->drupalLogin($user);
+
+    // Create a team
+    $org = array(
+      'title' => $this->randomName(32),
+    );
+
+    $expense = array(
+      'organization_nid' => '1',
+      'title' => $this->randomName(32),
+    );
+
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+
+    $this->drupalPost('node/add/stormexpense', $expense, t('Save'));
+
+    $this->assertText(t('Expense @title has been created.', array('@title' => $expense['title'])));
+  }
+
+  public function testStormexpenseReports() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm expense: access'));
+    $this->drupalLogin($user);
+
+    // Create a team
+    $this->drupalGet('storm/expenses/report/std/en');
+  }
+
+  public function testStormexpenseList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm expense: access', 'Storm expense: add', 'Storm expense: view all', 'Storm expense: edit all', 'Storm expense: delete all', 'Storm person: add'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm expense: access', 'Storm expense: add', 'Storm expense: view of user organization', 'Storm expense: edit of user organization', 'Storm expense: delete of user organization'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm expense: access', 'Storm expense: add', 'Storm expense: view own', 'Storm expense: edit own', 'Storm expense: delete own'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm expense: access', 'Storm expense: add', 'Storm expense: view all', 'Storm expense: edit own', 'Storm expense: delete own'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    // Create organization
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    // Create expenses
+    $exp1 = array(
+      'organization_nid' => $org->nid,
+      'title' => $this->randomName(32),
+    );
+    $this->drupalPost('node/add/stormexpense', $exp1, t('Save'));
+    $exp1 = node_load(array('title' => $exp1['title']));
+
+    $this->drupalLogin($userOwn);
+    $exp2 = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org->nid,
+    );
+    $this->drupalPost('node/add/stormexpense', $exp2, t('Save'));
+    $exp2 = node_load(array('title' => $exp2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $exp3 = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org2->nid,
+    );
+    $this->drupalPost('node/add/stormexpense', $exp3, t('Save'));
+    $exp3 = node_load(array('title' => $exp3['title']));
+
+    // Test for 'Storm expense: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/expenses');
+
+    $this->assertLink($exp1->title, 0, 'The Expense appears on the list');
+    $this->assertRaw('node/'. $exp1->nid .'/edit', 'The Expense edit icon appears on the list');
+    $this->assertRaw('node/'. $exp1->nid .'/delete', 'The Expense edit icon appears on the list');
+
+    $this->assertLink($exp2->title, 0, 'The Expense appears on the list');
+    $this->assertRaw('node/'. $exp2->nid .'/edit', 'The Expense edit icon appears on the list');
+    $this->assertRaw('node/'. $exp2->nid .'/delete', 'The Expense edit icon appears on the list');
+
+    $this->assertLink($exp3->title, 0, 'The Expense appears on the list');
+    $this->assertRaw('node/'. $exp3->nid .'/edit', 'The Expense edit icon appears on the list');
+    $this->assertRaw('node/'. $exp3->nid .'/delete', 'The Expense edit icon appears on the list');
+
+    // Test for 'Storm expense: view of user organization'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/expenses');
+
+    $this->assertLink($exp1->title, 0, 'The Expense appears on the list');
+    $this->assertRaw('node/'. $exp1->nid .'/edit', 'The Expense edit icon appears on the list');
+    $this->assertRaw('node/'. $exp1->nid .'/delete', 'The Expense edit icon appears on the list');
+
+    $this->assertLink($exp2->title, 0, 'The Expense appears on the list');
+    $this->assertRaw('node/'. $exp2->nid .'/edit', 'The Expense edit icon appears on the list');
+    $this->assertRaw('node/'. $exp2->nid .'/delete', 'The Expense edit icon appears on the list');
+
+    $this->assertNoLink($exp3->title, 'The Expense does not appear on the list');
+    $this->assertNoRaw('node/'. $exp3->nid .'/edit', 'The Expense edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $exp3->nid .'/delete', 'The Expense edit icon does not appear on the list');
+
+    // Test for 'Storm expense: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/expenses');
+
+    $this->assertNoLink($exp1->title, 'The Expense does not appear on the list');
+    $this->assertNoRaw('node/'. $exp1->nid .'/edit', 'The Expense edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $exp1->nid .'/delete', 'The Expense edit icon does not appear on the list');
+
+    $this->assertLink($exp2->title, 0, 'The Expense appears on the list');
+    $this->assertRaw('node/'. $exp2->nid .'/edit', 'The Expense edit icon appears on the list');
+    $this->assertRaw('node/'. $exp2->nid .'/delete', 'The Expense edit icon appears on the list');
+
+    $this->assertNoLink($exp3->title, 'The Expense does not appear on the list');
+    $this->assertNoRaw('node/'. $exp3->nid .'/edit', 'The Expense edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $exp3->nid .'/delete', 'The Expense edit icon does not appear on the list');
+
+
+    // Test for 'Storm expense: view all', 'Storm expense: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/expenses');
+
+    $this->assertLink($exp1->title, 0, 'The Expense appears on the list');
+    $this->assertNoRaw('node/'. $exp1->nid .'/edit', 'The Expense edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $exp1->nid .'/delete', 'The Expense edit icon does not appear on the list');
+
+    $this->assertLink($exp2->title, 0, 'The Expense appears on the list');
+    $this->assertNoRaw('node/'. $exp2->nid .'/edit', 'The Expense edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $exp2->nid .'/delete', 'The Expense edit icon does not appear on the list');
+
+    $this->assertLink($exp3->title, 0, 'The Expense appears on the list');
+    $this->assertRaw('node/'. $exp3->nid .'/edit', 'The Expense edit icon appears on the list');
+    $this->assertRaw('node/'. $exp3->nid .'/delete', 'The Expense edit icon appears on the list');
+
+  }
+}
+

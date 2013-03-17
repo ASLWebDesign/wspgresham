@@ -1,0 +1,240 @@
+<?php
+
+/**
+ * @file
+ */
+
+function stormticket_install() {
+  drupal_install_schema('stormticket');
+  variable_set('node_options_stormticket', array('status'));
+
+  $attributes = array();
+
+  $attributes['Ticket status'] = array(
+    'inserted' => 'inserted',
+    'in progress' => 'in progress',
+    'on hold' => 'on hold',
+    'completed' => 'completed'
+  );
+
+  $attributes['Ticket status search'] = array(
+    '-' => 'all',
+    'inserted,in progress,on hold' => 'open',
+    'inserted' => '-- inserted',
+    'in progress' => '-- in progress',
+    'on hold' => '-- on hold',
+    'completed' => 'completed'
+  );
+
+  $attributes['Ticket category'] = array(
+    'estimate' => 'estimate',
+    'bug' => 'bug',
+    'feature request' => 'feature request',
+    'support' => 'support',
+    'task' => 'task'
+  );
+
+  $attributes['Ticket category search'] = array(
+    '-' => 'all',
+    'estimate' => 'estimate',
+    'bug' => 'bug',
+    'feature request' => 'feature request',
+    'support' => 'support',
+    'task' => 'task'
+  );
+
+  $attributes['Ticket priority'] = array(
+    '1-low' => 'low',
+    '2-normal' => 'normal',
+    '3-high' => 'high',
+    '4-urgent' => 'urgent'
+  );
+
+  $attributes['Ticket priority search'] = array(
+    '-' => 'all',
+    '1-low' => 'low',
+    '2-normal' => 'normal',
+    '3-high' => 'high',
+    '4-urgent' => 'urgent'
+  );
+
+  $s = "INSERT INTO {stormattribute} (domain, akey, avalue, weight) VALUES ('%s', '%s', '%s', %d)";
+  $prevdomain = '';
+  $weight = 0;
+  foreach ($attributes as $domain => $attribute) {
+    if ($domain != $prevdomain) $weight=0;
+    foreach ($attribute as $key => $value) {
+      db_query($s, $domain, $key, $value, $weight);
+      $weight++;
+    }
+    $prevdomain = $domain;
+  }
+}
+
+function stormticket_disable() {
+  drupal_set_message(t('Nodes of type "Ticket" have not been deleted on disabling Storm Ticket. Please note that they will now have reduced functionality, and will not be protected by Storm Ticket access controls.'), 'warning');
+}
+
+function stormticket_uninstall() {
+  drupal_uninstall_schema('stormticket');
+
+  db_query($s = "DELETE FROM {stormattribute} WHERE domain IN ('Ticket status', 'Ticket status search', 'Ticket priority', 'Ticket priority search', 'Ticket category', 'Ticket category search')");
+}
+
+function stormticket_schema() {
+  $schema['stormticket'] = array(
+    'fields'        => array(
+      'vid'                 => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'nid'                 => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'organization_nid'    => array('type' => 'int'),
+      'organization_title'  => array('type' => 'varchar', 'length' => 128),
+      'project_nid'         => array('type' => 'int'),
+      'project_title'       => array('type' => 'varchar', 'length' => 128),
+      'task_nid'            => array('type' => 'int'),
+      'task_stepno'         => array('type' => 'varchar', 'length' => 128),
+      'task_title'          => array('type' => 'varchar', 'length' => 128),
+      'ticketcategory'      => array('type' => 'varchar', 'length' => 100),
+      'ticketstatus'        => array('type' => 'varchar', 'length' => 100),
+      'ticketpriority'      => array('type' => 'varchar', 'length' => 100),
+      'pricemode'           => array('type' => 'varchar', 'length' => 100),
+      'price'               => array('type' => 'float'),
+      'currency'            => array('type' => 'varchar', 'length' => 100),
+      'datebegin'           => array('type' => 'int', 'default' => 0),
+      'dateend'             => array('type' => 'int', 'default' => 0),
+      'durationunit'        => array('type' => 'varchar', 'length' => 100),
+      'duration'            => array('type' => 'float', 'default' => 0),
+      'assigned_nid'        => array('type' => 'int'),
+      'assigned_title'      => array('type' => 'varchar', 'length' => 100),
+      'billable'            => array('type' => 'int', 'default' => 0),
+      'billed'              => array('type' => 'int', 'default' => 0),
+    ),
+    'primary key' => array('vid'),
+    'indexes'     => array(
+      'nid'               => array('nid'),
+      'organization_nid'  => array('organization_nid'),
+      'project_nid'       => array('project_nid'),
+      'task_nid'          => array('task_nid'),
+      'assigned_nid'      => array('assigned_nid'),
+    ),
+  );
+
+  return $schema;
+}
+
+function stormticket_update_1() {
+  $ret = array();
+  db_add_field($ret, 'stormticket', 'datebegin', array('type' => 'int', 'default' => 0));
+  db_add_field($ret, 'stormticket', 'dateend', array('type' => 'int', 'default' => 0));
+  db_add_field($ret, 'stormticket', 'durationunit', array('type' => 'varchar', 'length' => 20));
+  db_add_field($ret, 'stormticket', 'duration', array('type' => 'float', 'default' => 0));
+  return $ret;
+}
+
+function stormticket_update_2() {
+  $ret = array();
+  db_add_field($ret, 'stormticket', 'pricemode', array('type' => 'varchar', 'length' => 20));
+  db_add_field($ret, 'stormticket', 'price', array('type' => 'float'));
+  db_add_field($ret, 'stormticket', 'currency', array('type' => 'varchar', 'length' => 20));
+  return $ret;
+}
+
+/**
+ * @function
+ * Implementation of hook_update_N: Adds assigned_nid and assigned_title fields
+ */
+function stormticket_update_6103() {
+  $ret = array();
+  db_add_field($ret, 'stormticket', 'assigned_nid', array('type' => 'int'));
+  db_add_field($ret, 'stormticket', 'assigned_title', array('type' => 'varchar', 'length' => 100));
+  return $ret;
+}
+
+/**
+ * Added billable and billed fields to stormticket table for issue 567558
+ */
+function stormticket_update_6106() {
+  $ret = array();
+  db_add_field($ret, 'stormticket', 'billable', array('type' => 'int', 'default' => 0));
+  db_add_field($ret, 'stormticket', 'billed', array('type' => 'int', 'default' => 0));
+  return $ret;
+}
+
+
+/*
+ * @function
+ * Database update for issue #899970
+ */
+function stormticket_update_6107() {
+  $ret = array();
+
+  db_change_field($ret, 'stormticket', 'ticketcategory', 'ticketcategory', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormticket', 'ticketstatus', 'ticketstatus', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormticket', 'ticketpriority', 'ticketpriority', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormticket', 'pricemode', 'pricemode', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormticket', 'currency', 'currency', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormticket', 'durationunit', 'durationunit', array('type' => 'varchar', 'length' => 100));
+
+  return $ret;
+}
+
+/**
+ * Improve primary keys and indexes
+ */
+function stormticket_update_6201() {
+  $return = array();
+  db_drop_primary_key($return, 'stormticket');
+  db_add_primary_key($return, 'stormticket', array('vid'));
+  $indexes = array(
+    'nid'               => array('nid'),
+    'organization_nid'  => array('organization_nid'),
+    'project_nid'       => array('project_nid'),
+    'task_nid'          => array('task_nid'),
+    'assigned_nid'      => array('assigned_nid'),
+  );
+  foreach ($indexes as $name => $fields) {
+    db_add_index($return, 'stormticket', $name, $fields);
+  }
+  return $return;
+}
+
+/**
+ * Move Storm Attribute module into component modules
+ */
+function stormticket_update_6202() {
+  $attributes = array();
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 5) {
+    $attributes['Ticket category search'] = array(
+      'bug' => 'bug',
+      'feature request' => 'feature request',
+      'support' => 'support',
+      'task' => 'task'
+    );
+  }
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 6) {
+    $attributes['Ticket status search'] = array('-' => 'all');
+    $attributes['Ticket category search'] = array('-' => 'all');
+    $attributes['Ticket priority search'] = array('-' => 'all');
+  }
+
+  $s = "INSERT INTO {stormattribute} (domain, akey, avalue, weight, isactive) VALUES ('%s', '%s', '%s', %d, 1)";
+  $prevdomain = '';
+  $weight = 0;
+  foreach ($attributes as $domain => $attribute) {
+    if ($domain != $prevdomain) $weight=0;
+    foreach ($attribute as $key => $value) {
+      db_query($s, $domain, $key, $value, $weight);
+      $weight++;
+    }
+    $prevdomain = $domain;
+  }
+
+  $ret = array();
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 6112) {
+    $ret[] = update_sql("UPDATE {stormticket} set pricemode='fixed_price' where pricemode='fixed_timetracking'");
+  }
+
+  return $ret;
+}

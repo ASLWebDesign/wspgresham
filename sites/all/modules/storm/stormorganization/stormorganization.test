@@ -1,0 +1,156 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm organization module
+ */
+class StormorganizationTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Storm Organization functionality',
+      'description' => 'Test the functionality of the Storm Organization module',
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormperson');
+    $privileged_user = $this->drupalCreateUser(array('Storm organization: add'));
+    $this->drupalLogin($privileged_user);
+  }
+
+  public function testStormorganizationAccess() {
+    $this->drupalGet('storm/organizations');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Organizations list for anonymous user'));
+
+    $basic_user = $this->drupalCreateUser();
+    $this->drupalLogin($basic_user);
+    $this->drupalGet('storm/organizations');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Organizations list for basic user'));
+
+    $privileged_user = $this->drupalCreateUser(array('Storm organization: access'));
+    $this->drupalLogin($privileged_user);
+    $this->drupalGet('storm/organizations');
+    $this->assertText(t('Organizations'), t('Make sure the correct page has been displayed by checking that the title is "Organizations".'));
+  }
+
+  public function testStormorganizationCreate() {
+    $edit = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $edit, t('Save'));
+    $this->assertText(t('Organization @title has been created.', array('@title' => $edit['title'])));
+  }
+
+  public function testStormorganizationList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: access', 'Storm organization: view all', 'Storm organization: edit all', 'Storm organization: delete all', 'Storm person: add'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: access', 'Storm organization: view belonged', 'Storm organization: edit belonged'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: access', 'Storm organization: view own', 'Storm organization: edit own', 'Storm organization: delete own'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: access', 'Storm organization: view all', 'Storm organization: edit own', 'Storm organization: delete own'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $organization1 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $organization1, t('Save'));
+    $organization1 = node_load(array('title' => $organization1['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $organization1->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    // Create organization
+    $this->drupalLogin($userOwn);
+    $organization2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $organization2, t('Save'));
+    $organization2 = node_load(array('title' => $organization2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $organization3 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $organization3, t('Save'));
+    $organization3 = node_load(array('title' => $organization3['title']));
+
+    // Test for 'Storm organization: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/organizations');
+
+    $this->assertLink($organization1->title, 0, 'The Organization appears on the list');
+    $this->assertRaw('node/'. $organization1->nid .'/edit', 'The Organization edit icon appears on the list');
+    $this->assertRaw('node/'. $organization1->nid .'/delete', 'The Organization edit icon appears on the list');
+
+    $this->assertLink($organization2->title, 0, 'The Organization appears on the list');
+    $this->assertRaw('node/'. $organization2->nid .'/edit', 'The Organization edit icon appears on the list');
+    $this->assertRaw('node/'. $organization2->nid .'/delete', 'The Organization edit icon appears on the list');
+
+    $this->assertLink($organization3->title, 0, 'The Organization appears on the list');
+    $this->assertRaw('node/'. $organization3->nid .'/edit', 'The Organization edit icon appears on the list');
+    $this->assertRaw('node/'. $organization3->nid .'/delete', 'The Organization edit icon appears on the list');
+
+    // Test for 'Storm organization: view belonged'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/organizations');
+
+    $this->assertLink($organization1->title, 0, 'The Organization appears on the list');
+    $this->assertRaw('node/'. $organization1->nid .'/edit', 'The Organization edit icon appears on the list');
+    $this->assertNoRaw('node/'. $organization1->nid .'/delete', 'The Organization edit icon does not appear on the list');
+
+    $this->assertNoLink($organization2->title, 'The Organization appears on the list');
+    $this->assertNoRaw('node/'. $organization2->nid .'/edit', 'The Organization edit icon appears on the list');
+    $this->assertNoRaw('node/'. $organization2->nid .'/delete', 'The Organization edit icon does not appear on the list');
+
+    $this->assertNoLink($organization3->title, 'The Organization does not appear on the list');
+    $this->assertNoRaw('node/'. $organization3->nid .'/edit', 'The Organization edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $organization3->nid .'/delete', 'The Organization edit icon does not appear on the list');
+
+    // Test for 'Storm organization: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/organizations');
+
+    $this->assertNoLink($organization1->title, 'The Organization does not appear on the list');
+    $this->assertNoRaw('node/'. $organization1->nid .'/edit', 'The Organization edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $organization1->nid .'/delete', 'The Organization edit icon does not appear on the list');
+
+    $this->assertLink($organization2->title, 0, 'The Organization appears on the list');
+    $this->assertRaw('node/'. $organization2->nid .'/edit', 'The Organization edit icon appears on the list');
+    $this->assertRaw('node/'. $organization2->nid .'/delete', 'The Organization edit icon appears on the list');
+
+    $this->assertNoLink($organization3->title, 'The Organization does not appear on the list');
+    $this->assertNoRaw('node/'. $organization3->nid .'/edit', 'The Organization edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $organization3->nid .'/delete', 'The Organization edit icon does not appear on the list');
+
+
+    // Test for 'Storm organization: view all', 'Storm organization: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/organizations');
+
+    $this->assertLink($organization1->title, 0, 'The Organization appears on the list');
+    $this->assertNoRaw('node/'. $organization1->nid .'/edit', 'The Organization edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $organization1->nid .'/delete', 'The Organization edit icon does not appear on the list');
+
+    $this->assertLink($organization2->title, 0, 'The Organization appears on the list');
+    $this->assertNoRaw('node/'. $organization2->nid .'/edit', 'The Organization edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $organization2->nid .'/delete', 'The Organization edit icon does not appear on the list');
+
+    $this->assertLink($organization3->title, 0, 'The Organization appears on the list');
+    $this->assertRaw('node/'. $organization3->nid .'/edit', 'The Organization edit icon appears on the list');
+    $this->assertRaw('node/'. $organization3->nid .'/delete', 'The Organization edit icon appears on the list');
+
+  }
+
+}

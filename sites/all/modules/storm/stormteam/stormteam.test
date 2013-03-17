@@ -1,0 +1,157 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm Team module.
+ */
+class StormteamTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Storm Team Functionality'),
+      'description' => t('Test the functionality of the Storm Team module'),
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormperson', 'stormteam');
+  }
+
+  public function testStormteamCreate() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm team: add', 'Storm team: view all', 'Storm person: add', 'Storm person: view all'));
+    $this->drupalLogin($user);
+
+    // Create a team
+    $team = array(
+      'title' => $this->randomName(32),
+    );
+
+    $this->drupalPost('node/add/stormteam', $team, t('Save'));
+
+    $this->assertText(t('Team @title has been created.', array('@title' => $team['title'])));;
+  }
+
+  public function testStormteamList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm team: access', 'Storm team: add', 'Storm team: view all', 'Storm team: edit all', 'Storm team: delete all', 'Storm person: add', 'Storm person: view all'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm team: access', 'Storm team: add', 'Storm team: view belonged', 'Storm team: edit belonged', 'Storm team: delete belonged'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm team: access', 'Storm team: add', 'Storm team: view own', 'Storm team: edit own', 'Storm team: delete own'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm team: access', 'Storm team: add', 'Storm team: view all', 'Storm team: edit own', 'Storm team: delete own'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    // Create organization
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $person = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $person, t('Save'));
+    $person = node_load(array('title' => $person['title']));
+
+    // Create teams
+    $team1 = array(
+      'title' => $this->randomName(32),
+      'members_array_1' => $person->nid,
+    );
+    $this->drupalPost('node/add/stormteam', $team1, t('Save'));
+    $team1 = node_load(array('title' => $team1['title']));
+
+    $this->drupalLogin($userOwn);
+    $team2 = array(
+      'title' => $this->randomName(32),
+    );
+    $this->drupalPost('node/add/stormteam', $team2, t('Save'));
+    $team2 = node_load(array('title' => $team2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $team3 = array(
+      'title' => $this->randomName(32),
+    );
+    $this->drupalPost('node/add/stormteam', $team3, t('Save'));
+    $team3 = node_load(array('title' => $team3['title']));
+
+    // Test for 'Storm team: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/teams');
+
+    $this->assertLink($team1->title, 0, 'The Team appears on the list');
+    $this->assertRaw('node/'. $team1->nid .'/edit', 'The Team edit icon appears on the list');
+    $this->assertRaw('node/'. $team1->nid .'/delete', 'The Team delete icon appears on the list');
+
+    $this->assertLink($team2->title, 0, 'The Team appears on the list');
+    $this->assertRaw('node/'. $team2->nid .'/edit', 'The Team edit icon appears on the list');
+    $this->assertRaw('node/'. $team2->nid .'/delete', 'The Team delete icon appears on the list');
+
+    $this->assertLink($team3->title, 0, 'The Team appears on the list');
+    $this->assertRaw('node/'. $team3->nid .'/edit', 'The Team edit icon appears on the list');
+    $this->assertRaw('node/'. $team3->nid .'/delete', 'The Team delete icon appears on the list');
+
+    // Test for 'Storm team: view belonged'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/teams');
+
+    $this->assertLink($team1->title, 0, 'The Team appears on the list');
+    $this->assertRaw('node/'. $team1->nid .'/edit', 'The Team edit icon appears on the list');
+    $this->assertRaw('node/'. $team1->nid .'/delete', 'The Team delete icon appears on the list');
+
+    $this->assertNoLink($team2->title, 'The Team does not appear on the list');
+    $this->assertNoRaw('node/'. $team2->nid .'/edit', 'The Team edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $team2->nid .'/delete', 'The Team delete icon does not appear on the list');
+
+    $this->assertNoLink($team3->title, 'The Team does not appear on the list');
+    $this->assertNoRaw('node/'. $team3->nid .'/edit', 'The Team edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $team3->nid .'/delete', 'The Team delete icon does not appear on the list');
+
+    // Test for 'Storm team: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/teams');
+
+    $this->assertNoLink($team1->title, 'The Team does not appear on the list');
+    $this->assertNoRaw('node/'. $team1->nid .'/edit', 'The Team edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $team1->nid .'/delete', 'The Team delete icon does not appear on the list');
+
+    $this->assertLink($team2->title, 0, 'The Team appears on the list');
+    $this->assertRaw('node/'. $team2->nid .'/edit', 'The Team edit icon appears on the list');
+    $this->assertRaw('node/'. $team2->nid .'/delete', 'The Team delete icon appears on the list');
+
+    $this->assertNoLink($team3->title, 'The Team does not appear on the list');
+    $this->assertNoRaw('node/'. $team3->nid .'/edit', 'The Team edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $team3->nid .'/delete', 'The Team delete icon does not appear on the list');
+
+
+    // Test for 'Storm team: view all', 'Storm team: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/teams');
+
+    $this->assertLink($team1->title, 0, 'The Team appears on the list');
+    $this->assertNoRaw('node/'. $team1->nid .'/edit', 'The Team edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $team1->nid .'/delete', 'The Team edit icon does not appear on the list');
+
+    $this->assertLink($team2->title, 0, 'The Team appears on the list');
+    $this->assertNoRaw('node/'. $team2->nid .'/edit', 'The Team edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $team2->nid .'/delete', 'The Team delete icon does not appear on the list');
+
+    $this->assertLink($team3->title, 0, 'The Team appears on the list');
+    $this->assertRaw('node/'. $team3->nid .'/edit', 'The Team edit icon appears on the list');
+    $this->assertRaw('node/'. $team3->nid .'/delete', 'The Team delete icon appears on the list');
+
+  }
+}

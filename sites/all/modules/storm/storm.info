@@ -1,0 +1,11 @@
+name = Storm
+description = "Project Management Application (base module - utility for other Storm modules)."
+core = 6.x
+package = Storm
+
+; Information added by drupal.org packaging script on 2012-10-15
+version = "6.x-2.1"
+core = "6.x"
+project = "storm"
+datestamp = "1350301325"
+

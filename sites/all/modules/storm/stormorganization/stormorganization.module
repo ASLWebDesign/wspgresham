@@ -1,0 +1,533 @@
+<?php
+
+/**
+ * @file
+ */
+
+function stormorganization_help($path, $arg) {
+  $output = '';
+
+  switch ($path) {
+    case "admin/help#stormorganization":
+      $output = '<p>'. t("Provides organization support for Storm") .'</p>';
+      break;
+  }
+
+  return $output;
+}
+
+function stormorganization_perm() {
+  return array(
+    'Storm organization: access',
+    'Storm organization: add',
+    'Storm organization: delete all',
+    'Storm organization: delete own',
+    'Storm organization: edit all',
+    'Storm organization: edit own',
+    'Storm organization: edit belonged',
+    'Storm organization: view all',
+    'Storm organization: view own',
+    'Storm organization: view belonged',
+  );
+}
+
+function stormorganization_access($op, $node, $account = NULL) {
+  if (empty($account)) {
+    global $user;
+    $account = $user;
+  }
+
+  if ($op == 'create') {
+    return user_access('Storm organization: add');
+  }
+
+  if (is_numeric($node)) $node = node_load($node);
+
+  if (!isset($account->stormorganization_nid) && module_exists('stormperson')) {
+    _stormperson_user_load($account);
+  }
+
+  if ($op == 'delete') {
+    if (user_access('Storm organization: delete all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm organization: delete own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+  }
+
+  if ($op == 'update') {
+    if (user_access('Storm organization: edit all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm organization: edit own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm organization: edit belonged') && ($account->stormorganization_nid == $node->nid)) {
+      return TRUE;
+    }
+  }
+
+  if ($op == 'view') {
+    if (user_access('Storm organization: view all')) {
+      return TRUE;
+    }
+    elseif (user_access('Storm organization: view own') && ($account->uid == $node->uid)) {
+      return TRUE;
+    }
+    elseif (user_access('Storm organization: view belonged') && ($account->stormorganization_nid == $node->nid)) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+function stormorganization_access_sql($sql, $where = array()) {
+  if (user_access('Storm organization: view all')) {
+    $where[] = "'storm_access'='storm_access'";
+    return storm_rewrite_sql($sql, $where);
+  }
+
+  global $user;
+
+  $cond = '';
+  if (user_access('Storm organization: view own')) {
+    $cond .= 'n.uid='. $user->uid;
+  }
+  if (user_access('Storm organization: view belonged')) {
+    if (!empty($cond)) $cond .= ' OR ';
+    $cond .= 'n.nid='. $user->stormorganization_nid;
+  }
+  if (empty($cond)) $cond = '0=1';
+  $where[] = $cond;
+
+  $where[] = "'storm_access'='storm_access'";
+  return storm_rewrite_sql($sql, $where);
+}
+
+function stormorganization_storm_rewrite_where_sql($query, $primary_table, $account) {
+  static $conds = array();
+
+  if (isset($conds[$primary_table][$account->uid])) {
+    return $conds[$primary_table][$account->uid];
+  }
+
+  if (preg_match("/'storm_access'='storm_access'/", $query)) {
+    $cond = '';
+  }
+  else {
+    if (user_access('Storm organization: view all', $account)) {
+      return '';
+    }
+
+    $cond = '';
+    if (user_access('Storm organization: view own', $account)) {
+      $cond .= "${primary_table}.uid=". $account->uid;
+    }
+    if (user_access('Storm organization: view belonged', $account)) {
+      if ($cond) {
+        $cond .= ' OR ';
+      }
+      // If function is called without viewing an organization, this variable may not be set.
+      // These lines check for that and set the organization node id to zero if not otherwise set.
+      if (!isset($account->stormorganization_nid)) {
+        $account->stormorganization_nid = 0;
+      }
+      $cond .= ' sor1.nid='. $account->stormorganization_nid;
+    }
+    if ($cond) {
+      $cond = " WHEN 'stormorganization' THEN (SELECT IF($cond,1,0) FROM {stormorganization} sor1 WHERE sor1.vid=${primary_table}.vid) ";
+    }
+    else {
+      $cond = " WHEN 'stormorganization' THEN 0 ";
+    }
+  }
+
+  $conds[$primary_table][$account->uid] = $cond;
+  return $cond;
+}
+
+function stormorganization_menu() {
+  $items = array();
+  $items['storm/organizations'] = array(
+    'title' => 'Organizations',
+    'description' => 'Storm organizations',
+    'page callback' => 'stormorganization_list',
+    'access arguments' => array('Storm organization: access'),
+    'file' => 'stormorganization.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 0,
+  );
+
+  $items['storm/organizations/autocomplete'] = array(
+    'title' => 'Organization autocomplete',
+    'page callback' => 'stormorganization_autocomplete',
+    'access arguments' => array('Storm organization: access'),
+    'type' => MENU_CALLBACK,
+    'file' => 'stormorganization.admin.inc',
+  );
+
+  $items['admin/settings/storm/organization'] = array(
+    'title' => 'Storm organization',
+    'description' => 'Storm organization administration page',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stormorganization_admin_settings'),
+    'access arguments' => array('Storm: access administration pages'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+function stormorganization_theme() {
+  return array(
+    'stormorganization_list' => array(
+      'file'      => 'stormorganization.theme.inc',
+      'arguments' => array('header', 'organizations'),
+    ),
+    'stormorganization_view' => array(
+      'file'      => 'stormorganization.theme.inc',
+      'arguments' => array('node', 'teaser', 'page'),
+    ),
+  );
+}
+
+function stormorganization_node_info() {
+  return array(
+    'stormorganization' => array(
+      'name' => t('Organization'),
+      'module' => 'stormorganization',
+      'description' => t("An organization for Storm."),
+      'title_label' => t("Name"),
+      'body_label' => t("Note"),
+    )
+  );
+}
+
+function stormorganization_content_extra_fields($type_name) {
+  if ($type_name == 'stormorganization') {
+    return array(
+      'group1' => array('label' => 'Customer/Provider/Active Group', 'weight' => -20),
+      'group2' => array('label' => 'Prefix/Fullname Group', 'weight' => -19),
+      'group3' => array('label' => 'Address Group', 'weight' => -18),
+      'group4' => array('label' => 'Phone/WWW/Email Group', 'weight' => -17),
+      'group5' => array('label' => 'Currency/Language/Tax ID Group', 'weight' => -16),
+    );
+  }
+}
+
+function stormorganization_form(&$node) {
+  $breadcrumb = array();
+  $breadcrumb[] = l(t('Storm'), 'storm');
+  $breadcrumb[] = l(t('Organizations'), 'storm/organizations');
+  drupal_set_breadcrumb($breadcrumb);
+
+  $type = node_get_types('type', $node);
+
+  $form['#attributes']['class'] = 'stormcomponent_node_form';
+
+  $form['title'] = array(
+    '#type' => 'textfield',
+    '#title' => check_plain($type->title_label),
+    '#required' => TRUE,
+    '#default_value' => $node->title,
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'title') : -18,
+  );
+
+  $form['group1'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group1') : -20,
+  );
+
+  $form['group1']['iscustomer'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Customer'),
+    '#default_value' => $node->iscustomer,
+  );
+
+  $form['group1']['isprovider'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Provider'),
+    '#default_value' => $node->isprovider,
+  );
+
+  $form['group1']['isactive'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Active'),
+    '#default_value' => $node->isactive,
+  );
+
+  $form['group2'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group2') : -19,
+  );
+
+  $form['group3'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group3') : -18,
+  );
+
+  $form['group3']['address'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Address'),
+    '#default_value' => isset($node->address) ? $node->address : NULL,
+    '#weight' => 1,
+  );
+
+  $form['group3']['city'] = array(
+    '#type' => 'textfield',
+    '#title' => t('City'),
+    '#size' => 20,
+    '#default_value' => isset($node->city) ? $node->city : NULL,
+    '#weight' => 2,
+  );
+
+  $form['group3']['provstate'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Province / State'),
+    '#size' => 20,
+    '#default_value' => isset($node->provstate) ? $node->provstate : NULL,
+    '#weight' => 3,
+  );
+
+  $country_list = storm_attributes_bydomain('Country');
+  $form['group3']['country'] = array(
+    '#type' => 'select',
+    '#title' => t('Country'),
+    '#options' => $country_list['values'],
+    '#default_value' => $node->country,
+    '#weight' => 4,
+  );
+
+  $form['group3']['zip'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Zip'),
+    '#size' => 15,
+    '#default_value' => isset($node->zip) ? $node->zip : NULL,
+    '#weight' => 5,
+  );
+
+  $form['group4'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group4') : -17,
+  );
+
+  $form['group4']['phone'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Phone'),
+    '#default_value' => isset($node->phone) ? $node->phone : NULL,
+  );
+
+  $form['group4']['www'] = array(
+    '#type' => 'textfield',
+    '#title' => t('WWW'),
+    '#size' => 30,
+    '#default_value' => isset($node->www) ? $node->www : NULL,
+  );
+
+  $form['group4']['email'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Email'),
+    '#size' => 30,
+    '#default_value' => isset($node->email) ? $node->email : NULL,
+  );
+
+  $form['group5'] = array(
+    '#type' => 'markup',
+    '#theme' => 'storm_form_group',
+    '#weight' => module_exists('content') ? content_extra_field_weight($node->type, 'group5') : -16,
+  );
+
+  $currency_list = storm_attributes_bydomain('Currency');
+  $form['group5']['currency'] = array(
+    '#type' => 'select',
+    '#title' => t('Currency'),
+    '#options' => $currency_list['values'],
+    '#default_value' => $node->currency,
+  );
+
+  $pricemode_list = storm_attributes_bydomain('Price mode');
+  $form['group5']['pricemode'] = array(
+    '#type' => 'select',
+    '#title' => t('Price mode'),
+    '#default_value' => $node->pricemode,
+    '#options' => $pricemode_list['values'],
+  );
+
+  $form['group5']['price'] = array(
+    '#title' => t('Price'),
+    '#type' => 'textfield',
+    '#size' => 15,
+    '#default_value' => isset($node->price) ? $node->price : NULL,
+  );
+
+  $languages = language_list('language', TRUE);
+  $languages_options = array();
+  foreach ($languages as $language_code => $language) {
+    $languages_options[$language_code] = $language->name;
+  }
+  $form['group5']['orglanguage'] = array(
+    '#type' => 'select',
+    '#title' => t('Language'),
+    '#options' => $languages_options,
+    '#default_value' => isset($node->orglanguage) ? $node->orglanguage : NULL,
+  );
+
+  $form['group5']['taxid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Tax ID'),
+    '#size' => 20,
+    '#default_value' => isset($node->taxid) ? $node->taxid : NULL,
+  );
+
+  if ($type->has_body) {
+    $form['body_field'] = node_body_field($node, $type->body_label, $type->min_word_count);
+  }
+
+  $form['title_old'] = array(
+    '#type' => 'hidden',
+    '#default_value' => isset($node->title_old) ? $node->title_old : NULL,
+  );
+
+  return $form;
+}
+
+function stormorganization_insert($node) {
+  db_query("INSERT INTO {stormorganization}
+           (vid, nid, country, www, phone, email, currency,
+           provstate, zip, city, address, taxid, orglanguage, iscustomer, isprovider, isactive, pricemode, price
+           ) VALUES
+           (%d, %d, '%s', '%s', '%s', '%s', '%s',
+           '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, '%s', %f
+           )",
+            $node->vid, $node->nid, $node->country, $node->www, $node->phone, $node->email, $node->currency,
+            $node->provstate, $node->zip, $node->city, $node->address, $node->taxid,
+            $node->orglanguage, $node->iscustomer, $node->isprovider, $node->isactive, $node->pricemode, $node->price
+            );
+}
+
+function stormorganization_update($node) {
+  // if this is a new node or we're adding a new revision,
+  if ($node->revision) {
+    stormorganization_insert($node);
+  }
+  else {
+    db_query("UPDATE {stormorganization} SET
+              country='%s', www='%s', phone='%s', email='%s', currency = '%s',
+              provstate = '%s', zip = '%s', city = '%s', address = '%s', taxid = '%s', orglanguage = '%s',
+              iscustomer=%d, isprovider=%d, isactive=%d, pricemode='%s', price=%f WHERE vid = %d",
+              $node->country, $node->www, $node->phone, $node->email, $node->currency,
+              $node->provstate, $node->zip, $node->city, $node->address, $node->taxid, $node->orglanguage,
+              $node->iscustomer, $node->isprovider, $node->isactive, $node->pricemode, $node->price, $node->vid);
+    if ($node->title != $node->title_old) {
+      module_invoke_all('stormorganization_change', $node->nid, $node->title);
+    }
+  }
+}
+
+function stormorganization_nodeapi(&$node, $op, $teaser, $page) {
+  switch ($op) {
+    case 'prepare':
+      if (!isset($node->nid)) {
+        $node->iscustomer = 1;
+        $node->isprovider = 0;
+        $node->isactive = 1;
+
+        $country_list = storm_attributes_bydomain('Country');
+        $node->country = $country_list['default'];
+
+        $currency_list = storm_attributes_bydomain('Currency');
+        $node->currency = $currency_list['default'];
+
+        $pricemode_list = storm_attributes_bydomain('Price mode');
+        $node->pricemode = $pricemode_list['default'];
+      }
+      break;
+    case 'delete revision':
+      // Notice that we're matching a single revision based on the node's vid.
+      db_query('DELETE FROM {stormorganization} WHERE vid = %d', $node->vid);
+      break;
+  }
+}
+
+function stormorganization_delete($node) {
+  // Notice that we're matching all revision, by using the node's nid.
+  db_query('DELETE FROM {stormorganization} WHERE nid = %d', $node->nid);
+}
+
+function stormorganization_load($node) {
+  $additions = db_fetch_object(db_query('SELECT * FROM {stormorganization} WHERE vid = %d', $node->vid));
+  $additions->title_old = $node->title;
+  return $additions;
+}
+
+function stormorganization_view($node, $teaser = FALSE, $page = FALSE) {
+  $breadcrumb = array();
+  $breadcrumb[] = l(t('Storm'), 'storm');
+  $breadcrumb[] = l(t('Organizations'), 'storm/organizations');
+  drupal_set_breadcrumb($breadcrumb);
+
+  return theme('stormorganization_view', $node, $teaser, $page);
+}
+
+function stormorganization_admin_settings() {
+  $form = array();
+
+  $s = "SELECT n.nid, n.title FROM  {node} AS n INNER JOIN {stormorganization} AS sor ON sor.nid=n.nid WHERE n.status=1 AND n.type='stormorganization' ORDER BY n.title";
+  $s = stormorganization_access_sql($s);
+  $s = db_rewrite_sql($s);
+  $r = db_query($s);
+  $organizations = array();
+  while ($organization = db_fetch_object($r)) {
+    $organizations[$organization->nid] = $organization->title;
+  }
+
+  if (count($organizations) > 0) {
+    $form['storm_organization_nid'] = array(
+      '#type' => 'select',
+      '#title' => t('Host organization'),
+      '#options' => $organizations,
+      '#default_value' => variable_get('storm_organization_nid', 0),
+      '#description' => t('The organization that owns this system'),
+      '#weight' => -30,
+    );
+  }
+  else {
+    $form['storm_organization_nid'] = array(
+      '#type' => 'item',
+      '#title' => t('Host organization'),
+      '#value' => t('There are no Storm Organizations in the system.') .'<br />'. l(t('Create a Storm Organization'), 'node/add/stormorganization'),
+    );
+  }
+  return system_settings_form($form);
+}
+
+function stormorganization_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'stormorganization'),
+  );
+}
+
+function stormorganization_storm_dashboard_links($type) {
+  $links = array();
+  if ($type == 'page' || $type == 'block') {
+    $links[] = array(
+      'theme' => 'storm_dashboard_link',
+      'title' => t('Organizations'),
+      'icon' => 'stormorganizations',
+      'path' => 'storm/organizations',
+      'params' => array(),
+      'access_arguments' => 'Storm organization: access',
+      'node_type' => 'stormorganization',
+      'add_type' => 'stormorganization',
+      'map' => array(),
+      'weight' => 1,
+    );
+  }
+  return $links;
+}

@@ -1,0 +1,259 @@
+<?php
+
+/**
+ * @file
+ */
+
+function stormtask_install() {
+  drupal_install_schema('stormtask');
+  variable_set('node_options_stormtask', array('status'));
+
+  $attributes = array();
+
+  $attributes['Task status'] = array(
+    'inserted' => 'inserted',
+    'in progress' => 'in progress',
+    'on hold' => 'on hold',
+    'completed' => 'completed'
+  );
+
+  $attributes['Task status search'] = array(
+    '-' => 'all',
+    'inserted,in progress,on hold' => 'open',
+    'inserted' => '-- inserted',
+    'in progress' => '-- in progress',
+    'on hold' => '-- on hold',
+    'completed' => 'completed'
+  );
+
+  $attributes['Task category'] = array(
+    'bug' => 'bug',
+    'feature request' => 'feature request',
+    'support' => 'support',
+    'task' => 'task'
+  );
+
+  $attributes['Task priority'] = array(
+    '1-low' => 'low',
+    '2-normal' => 'normal',
+    '3-high' => 'high',
+    '4-urgent' => 'urgent'
+  );
+
+  $attributes['Task priority search'] = array(
+    '-' => 'all',
+    '1-low' => 'low',
+    '2-normal' => 'normal',
+    '3-high' => 'high',
+    '4-urgent' => 'urgent'
+  );
+
+  $attributes['Task category search'] = array(
+    '-' => 'all',
+    'bug' => 'bug',
+    'feature request' => 'feature request',
+    'support' => 'support',
+    'task' => 'task'
+  );
+
+  $s = "INSERT INTO {stormattribute} (domain, akey, avalue, weight) VALUES ('%s', '%s', '%s', %d)";
+  $prevdomain = '';
+  $weight = 0;
+  foreach ($attributes as $domain => $attribute) {
+    if ($domain != $prevdomain) $weight=0;
+    foreach ($attribute as $key => $value) {
+      db_query($s, $domain, $key, $value, $weight);
+      $weight++;
+    }
+    $prevdomain = $domain;
+  }
+
+  db_query("UPDATE {stormattribute} SET isdefault = 1 WHERE domain = 'Task category' and akey = 'task'");
+}
+
+function stormtask_disable() {
+  drupal_set_message(t('Nodes of type "Task" have not been deleted on disabling Storm Task. Please note that they will now have reduced functionality, and will not be protected by Storm Task access controls.'), 'warning');
+}
+
+function stormtask_uninstall() {
+  drupal_uninstall_schema('stormtask');
+
+  db_query($s = "DELETE FROM {stormattribute} WHERE domain IN ('Task status', 'Task status search', 'Task category', 'Task category search', 'Task priority', 'Task priority search')");
+}
+
+function stormtask_schema() {
+  $schema['stormtask'] = array(
+    'fields'        => array(
+      'vid'                 => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'nid'                 => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'stepno'              => array('type' => 'varchar', 'length' => 50),
+      'organization_nid'    => array('type' => 'int'),
+      'organization_title'  => array('type' => 'varchar', 'length' => 150),
+      'project_nid'         => array('type' => 'int'),
+      'project_title'       => array('type' => 'varchar', 'length' => 150),
+      'parent_nid'          => array('type' => 'int'),
+      'weight'              => array('type' => 'int'),
+      'taskstatus'          => array('type' => 'varchar', 'length' => 100),
+      'taskcategory'        => array('type' => 'varchar', 'length' => 100),
+      'taskpriority'        => array('type' => 'varchar', 'length' => 100),
+      'pricemode'           => array('type' => 'varchar', 'length' => 100),
+      'price'               => array('type' => 'float'),
+      'currency'            => array('type' => 'varchar', 'length' => 100),
+      'datebegin'           => array('type' => 'int', 'default' => 0),
+      'dateend'             => array('type' => 'int', 'default' => 0),
+      'durationunit'        => array('type' => 'varchar', 'length' => 100),
+      'duration'            => array('type' => 'float', 'default' => 0),
+      'assigned_nid'        => array('type' => 'int'),
+      'assigned_title'      => array('type' => 'varchar', 'length' => 100),
+      'billable'            => array('type' => 'int', 'default' => 0),
+      'billed'              => array('type' => 'int', 'default' => 0),
+    ),
+    'primary key' => array('vid'),
+    'indexes'     => array(
+      'nid'               => array('nid'),
+      'organization_nid'  => array('organization_nid'),
+      'project_nid'       => array('project_nid'),
+      'assigned_nid'      => array('assigned_nid'),
+      'parent_nid'        => array('parent_nid'),
+    ),
+  );
+
+  return $schema;
+}
+
+function stormtask_update_1() {
+  $ret = array();
+  db_add_field($ret, 'stormtask', 'taskcategory', array('type' => 'varchar', 'length' => 20));
+  db_add_field($ret, 'stormtask', 'taskpriority', array('type' => 'varchar', 'length' => 20));
+  return $ret;
+}
+
+function stormtask_update_2() {
+  $ret = array();
+  db_add_field($ret, 'stormtask', 'datebegin', array('type' => 'int', 'default' => 0));
+  db_add_field($ret, 'stormtask', 'dateend', array('type' => 'int', 'default' => 0));
+  db_add_field($ret, 'stormtask', 'durationunit', array('type' => 'varchar', 'length' => 20));
+  db_add_field($ret, 'stormtask', 'duration', array('type' => 'float', 'default' => 0));
+  return $ret;
+}
+
+/**
+ * @function
+ * Implementation of hook_update_N: Adds assigned_nid and assigned_title fields.
+ */
+function stormtask_update_6103() {
+  $ret = array();
+  db_add_field($ret, 'stormtask', 'assigned_nid', array('type' => 'int'));
+  db_add_field($ret, 'stormtask', 'assigned_title', array('type' => 'varchar', 'length' => 100));
+  return $ret;
+}
+
+/**
+ * Added billable and billed fields to stormtask table for issue 567558.
+ */
+function stormtask_update_6106() {
+  $ret = array();
+  db_add_field($ret, 'stormtask', 'billable', array('type' => 'int', 'default' => 0));
+  db_add_field($ret, 'stormtask', 'billed', array('type' => 'int', 'default' => 0));
+  return $ret;
+}
+
+
+/*
+ * @function
+ * Database update for issue #899970
+ */
+function stormtask_update_6107() {
+  $ret = array();
+
+  db_change_field($ret, 'stormtask', 'taskstatus', 'taskstatus', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormtask', 'taskcategory', 'taskcategory', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormtask', 'taskpriority', 'taskpriority', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormtask', 'pricemode', 'pricemode', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormtask', 'currency', 'currency', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormtask', 'durationunit', 'durationunit', array('type' => 'varchar', 'length' => 100));
+
+  return $ret;
+}
+
+/**
+ * Improve primary keys and indexes
+ */
+function stormtask_update_6201() {
+  $return = array();
+  db_drop_primary_key($return, 'stormtask');
+  db_add_primary_key($return, 'stormtask', array('vid'));
+  $indexes = array(
+    'nid'               => array('nid'),
+    'organization_nid'  => array('organization_nid'),
+    'project_nid'       => array('project_nid'),
+    'assigned_nid'      => array('assigned_nid'),
+    'parent_nid'        => array('parent_nid'),
+  );
+  foreach ($indexes as $name => $fields) {
+    db_add_index($return, 'stormtask', $name, $fields);
+  }
+  return $return;
+}
+
+/**
+ * Move Storm Attribute module into component modules
+ */
+function stormtask_update_6202() {
+  $attributes = array();
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 1) {
+    $attributes['Task category'] = array(
+      'bug' => 'bug',
+      'feature request' => 'feature request',
+      'support' => 'support',
+      'task' => 'task'
+    );
+
+    $attributes['Task priority'] = array(
+      '1-low' => 'low',
+      '2-normal' => 'normal',
+      '3-high' => 'high',
+      '4-urgent' => 'urgent'
+    );
+
+    $attributes['Task priority search'] = array(
+      '1-low' => 'low',
+      '2-normal' => 'normal',
+      '3-high' => 'high',
+      '4-urgent' => 'urgent'
+    );
+  }
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 6) {
+    $attributes['Task category search'] = array(
+      '-' => 'all',
+      'bug' => 'bug',
+      'feature request' => 'feature request',
+      'support' => 'support',
+      'task' => 'task'
+    );
+
+    $attributes['Task status search'] = array('-' => 'all');
+    $attributes['Task priority search'] = array('-' => 'all');
+  }
+
+  $s = "INSERT INTO {stormattribute} (domain, akey, avalue, weight) VALUES ('%s', '%s', '%s', %d)";
+  $prevdomain = '';
+  $weight = 0;
+  foreach ($attributes as $domain => $attribute) {
+    if ($domain != $prevdomain) $weight=0;
+    foreach ($attribute as $key => $value) {
+      db_query($s, $domain, $key, $value, $weight);
+      $weight++;
+    }
+    $prevdomain = $domain;
+  }
+  $ret = array();
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 6112) {
+    $ret[] = update_sql("UPDATE {stormtask} set pricemode='fixed_price' where pricemode='fixed_timetracking'");
+  }
+
+  return $ret;
+}

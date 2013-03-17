@@ -1,0 +1,89 @@
+<?php
+
+/**
+ * @file
+ */
+
+function stormtimetracking_install() {
+  drupal_install_schema('stormtimetracking');
+  variable_set('node_options_stormtimetracking', array('status'));
+}
+
+function stormtimetracking_disable() {
+  drupal_set_message(t('Nodes of type "Timetracking" have not been deleted on disabling Storm Timetracking. Please note that they will now have reduced functionality, and will not be protected by Storm Timetracking access controls.'), 'warning');
+}
+
+function stormtimetracking_uninstall() {
+  drupal_uninstall_schema('stormtimetracking');
+}
+
+function stormtimetracking_schema() {
+  $schema['stormtimetracking'] = array(
+    'fields'                => array(
+      'vid'                 => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'nid'                 => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'organization_nid'    => array('type' => 'int'),
+      'organization_title'  => array('type' => 'varchar', 'length' => 128),
+      'project_nid'         => array('type' => 'int'),
+      'project_title'       => array('type' => 'varchar', 'length' => 128),
+      'task_nid'            => array('type' => 'int'),
+      'task_stepno'         => array('type' => 'varchar', 'length' => 128),
+      'task_title'          => array('type' => 'varchar', 'length' => 128),
+      'ticket_nid'          => array('type' => 'int'),
+      'ticket_title'        => array('type' => 'varchar', 'length' => 128),
+      'trackingdate'        => array('type' => 'int'),
+      'timebegin'           => array('type' => 'varchar', 'length' => 5),
+      'timeend'             => array('type' => 'varchar', 'length' => 5),
+      'duration'            => array('type' => 'float'),
+      'billing_duration'    => array('type' => 'float'),
+      'billable'            => array('type' => 'int'),
+      'billed'              => array('type' => 'int'),
+    ),
+    'primary key' => array('vid'),
+    'indexes'     => array(
+      'nid'               => array('nid'),
+      'organization_nid'  => array('organization_nid'),
+      'project_nid'       => array('project_nid'),
+      'task_nid'          => array('task_nid'),
+      'ticket_nid'        => array('ticket_nid'),
+      'trackingdate'      => array('trackingdate'),
+    ),
+  );
+
+  return $schema;
+}
+
+function stormtimetracking_update_1() {
+  $ret = array();
+  db_add_field($ret, 'stormtimetracking', 'billable', array('type' => 'int'));
+  return $ret;
+}
+
+function stormtimetracking_update_6102() {
+  $ret = array();
+  db_add_field($ret, 'stormtimetracking', 'billed', array('type' => 'int'));
+  db_change_field($ret, 'stormtimetracking', 'duration', 'billing_duration', array('type' => 'float'));
+  db_add_field($ret, 'stormtimetracking', 'duration', array('type' => 'float'));
+  return $ret;
+}
+
+/**
+ * Improve primary keys and indexes
+ */
+function stormtimetracking_update_6201() {
+  $return = array();
+  db_drop_primary_key($return, 'stormtimetracking');
+  db_add_primary_key($return, 'stormtimetracking', array('vid'));
+  $indexes = array(
+    'nid'               => array('nid'),
+    'organization_nid'  => array('organization_nid'),
+    'project_nid'       => array('project_nid'),
+    'task_nid'          => array('task_nid'),
+    'ticket_nid'        => array('ticket_nid'),
+    'trackingdate'      => array('trackingdate'),
+  );
+  foreach ($indexes as $name => $fields) {
+    db_add_index($return, 'stormtimetracking', $name, $fields);
+  }
+  return $return;
+}

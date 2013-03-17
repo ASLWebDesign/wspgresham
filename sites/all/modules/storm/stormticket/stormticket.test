@@ -1,0 +1,344 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm Ticket module.
+ */
+class StormticketTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Storm Ticket Functionality'),
+      'description' => t('Test the functionality of the Storm Ticket module'),
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormproject', 'stormtask', 'stormticket', 'stormperson', 'stormteam');
+  }
+
+  public function testStormticketAccess() {
+    $this->drupalGet('storm/tickets');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Tickets list for anonymous user'));
+
+    $basic_user = $this->drupalCreateUser();
+    $this->drupalLogin($basic_user);
+    $this->drupalGet('storm/tickets');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Tickets list for basic user'));
+
+    $privileged_user = $this->drupalCreateUser(array('Storm ticket: access'));
+    $this->drupalLogin($privileged_user);
+    $this->drupalGet('storm/tickets');
+    $this->assertText(t('Tickets'), t('Make sure the correct page has been displayed by checking that the title is "Tickets".'));
+  }
+
+  public function testStormticketCreate() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: add', 'Storm project: view all', 'Storm task: add', 'Storm task: view all', 'Storm ticket: add', 'Storm ticket: view all'));
+    $this->drupalLogin($user);
+
+    // Create organization and invoice
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => '1',
+    );
+    $task = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $ticket = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $this->drupalPost('node/add/stormtask', $task, t('Save'));
+    $this->drupalPost('node/add/stormticket', $ticket, t('Save'));
+
+    $this->assertText(t('Ticket @title has been created.', array('@title' => $ticket['title'])));;
+  }
+
+  public function testStormticketList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm ticket: access', 'Storm ticket: add', 'Storm ticket: view all', 'Storm ticket: edit all', 'Storm ticket: delete all', 'Storm person: add', 'Storm team: add', 'Storm person: view all', 'Storm team: view all', 'Storm project: add', 'Storm project: view all'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm ticket: access', 'Storm ticket: add', 'Storm ticket: view of user organization', 'Storm ticket: edit of user organization', 'Storm ticket: delete of user organization'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm ticket: access', 'Storm ticket: add', 'Storm ticket: view own', 'Storm ticket: edit own', 'Storm ticket: delete own', 'Storm project: view all'));
+    $userAssigned = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm ticket: access', 'Storm ticket: add', 'Storm ticket: view if assigned to ticket', 'Storm ticket: edit if assigned to ticket', 'Storm ticket: delete if assigned to ticket'));
+    $userAssignedTeam = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm ticket: access', 'Storm ticket: add', 'Storm ticket: view if assigned to ticket', 'Storm ticket: edit if assigned to ticket', 'Storm ticket: delete if assigned to ticket'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm ticket: access', 'Storm ticket: add', 'Storm ticket: view all', 'Storm ticket: edit own', 'Storm ticket: delete own', 'Storm project: view all'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    // Create organization
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userAssigned->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+    $assignedPerson = node_load(array('title' => $personOrg['title']));
+
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userAssignedTeam->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+    $assignedPersonTeam = node_load(array('title' => $personOrg['title']));
+
+    $team = array(
+      'title' => $this->randomName(32),
+      'members_array_1' => $assignedPersonTeam->nid,
+    );
+    $this->drupalPost('node/add/stormteam', $team, t('Save'));
+    $team = node_load(array('title' => $team['title']));
+
+    // Create project foreach organization
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $projectOrg = node_load(array('title' => $prj['title']));
+
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org->nid,
+      'assigned_nid' => $team->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $projectTeam = node_load(array('title' => $prj['title']));
+
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org2->nid,
+      'assigned_nid' => $team->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $projectOrg2 = node_load(array('title' => $prj['title']));
+
+    // Create tickets
+    $ticket1 = array(
+      'organization_nid' => $org->nid,
+      'project_nid' => $projectOrg->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormticket', $ticket1, t('Save'), array('query' => 'organization_nid='.$org->nid));
+    $ticket1 = node_load(array('title' => $ticket1['title']));
+
+    $ticketAssigned = array(
+      'organization_nid' => $org->nid,
+      'project_nid' => $projectOrg->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'assigned_nid' => $assignedPerson->nid,
+    );
+    $this->drupalPost('node/add/stormticket', $ticketAssigned, t('Save'), array('query' => 'organization_nid='.$org->nid.'&project_nid='.$projectOrg->nid));
+    $ticketAssigned = node_load(array('title' => $ticketAssigned['title']));
+
+    $ticketAssignedTeam = array(
+      'organization_nid' => $org->nid,
+      'project_nid' => $projectTeam->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'assigned_nid' => $team->nid,
+    );
+    $this->drupalPost('node/add/stormticket', $ticketAssignedTeam, t('Save'), array('query' => 'organization_nid='.$org->nid.'&project_nid='.$projectTeam->nid));
+    $ticketAssignedTeam = node_load(array('title' => $ticketAssignedTeam['title']));
+
+    $this->drupalLogin($userOwn);
+    $ticket2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'project_nid' => $projectOrg->nid,
+    );
+    $this->drupalPost('node/add/stormticket', $ticket2, t('Save'), array('query' => 'organization_nid='.$org->nid));
+    $ticket2 = node_load(array('title' => $ticket2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $ticket3 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org2->nid,
+      'project_nid' => $projectOrg2->nid,
+    );
+    $this->drupalPost('node/add/stormticket', $ticket3, t('Save'), array('query' => 'organization_nid='.$org2->nid));
+    $ticket3 = node_load(array('title' => $ticket3['title']));
+
+    // Test for 'Storm ticket: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/tickets');
+
+    $this->assertLink($ticket1->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticket1->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticket1->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertLink($ticket2->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticket2->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticket2->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertLink($ticket3->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticket3->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticket3->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertLink($ticketAssigned->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticketAssigned->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticketAssigned->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertLink($ticketAssignedTeam->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticketAssignedTeam->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticketAssignedTeam->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    // Test for 'Storm ticket: view of user organization'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/tickets');
+
+    $this->assertLink($ticket1->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticket1->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticket1->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertLink($ticket2->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticket2->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticket2->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertNoLink($ticket3->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket3->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket3->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertLink($ticketAssigned->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticketAssigned->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticketAssigned->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertLink($ticketAssignedTeam->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticketAssignedTeam->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticketAssignedTeam->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    // Test for 'Storm ticket: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/tickets');
+
+    $this->assertNoLink($ticket1->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket1->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket1->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertLink($ticket2->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticket2->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticket2->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertNoLink($ticket3->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket3->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket3->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertNoLink($ticketAssigned->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssigned->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssigned->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertNoLink($ticketAssignedTeam->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssignedTeam->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssignedTeam->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    // Test for 'Storm ticket: view all', 'Storm ticket: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/tickets');
+
+    $this->assertLink($ticket1->title, 0, 'The Ticket appears on the list');
+    $this->assertNoRaw('node/'. $ticket1->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket1->nid .'/delete', 'The Ticket edit icon does not appear on the list');
+
+    $this->assertLink($ticket2->title, 0, 'The Ticket appears on the list');
+    $this->assertNoRaw('node/'. $ticket2->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket2->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertLink($ticket3->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticket3->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticket3->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertLink($ticketAssigned->title, 0, 'The Ticket appears on the list');
+    $this->assertNoRaw('node/'. $ticketAssigned->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssigned->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertLink($ticketAssignedTeam->title, 0, 'The Ticket appears on the list');
+    $this->assertNoRaw('node/'. $ticketAssignedTeam->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssignedTeam->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    // Test for 'Storm ticket: view if assigned to ticket'
+    $this->drupalLogin($userAssigned);
+    $this->drupalGet('storm/tickets');
+
+    $this->assertNoLink($ticket1->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket1->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket1->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertNoLink($ticket2->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket2->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket2->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertNoLink($ticket3->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket3->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket3->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertLink($ticketAssigned->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticketAssigned->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticketAssigned->nid .'/delete', 'The Ticket delete icon appears on the list');
+
+    $this->assertNoLink($ticketAssignedTeam->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssignedTeam->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssignedTeam->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    // Test for 'Storm ticket: view if assigned to ticket' (using team)
+    $this->drupalLogin($userAssignedTeam);
+    $this->drupalGet('storm/tickets');
+
+    $this->assertNoLink($ticket1->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket1->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket1->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertNoLink($ticket2->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket2->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket2->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertNoLink($ticket3->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket3->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticket3->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertNoLink($ticketAssigned->title, 'The Ticket does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssigned->nid .'/edit', 'The Ticket edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $ticketAssigned->nid .'/delete', 'The Ticket delete icon does not appear on the list');
+
+    $this->assertLink($ticketAssignedTeam->title, 0, 'The Ticket appears on the list');
+    $this->assertRaw('node/'. $ticketAssignedTeam->nid .'/edit', 'The Ticket edit icon appears on the list');
+    $this->assertRaw('node/'. $ticketAssignedTeam->nid .'/delete', 'The Ticket delete icon appears on the list');
+  }
+}

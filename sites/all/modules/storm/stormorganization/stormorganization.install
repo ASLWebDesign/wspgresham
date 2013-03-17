@@ -1,0 +1,655 @@
+<?php
+
+/**
+ * @file
+ */
+
+function stormorganization_install() {
+  drupal_install_schema('stormorganization');
+  variable_set('node_options_stormorganization', array('status'));
+
+  $attributes = array();
+
+  $attributes['Price mode'] = array(
+    'not applicable' => 'Not Applicable',
+    'hourly' => 'Hourly',
+    'daily' => 'Daily',
+    'fixed_price' => 'Fixed Price',
+  );
+
+  $attributes['Currency'] = array(
+    'USD' => 'US Dollar',
+    'CAD' => 'Canadian Dollar',
+    'EUR' => 'Euro',
+    'GBP' => 'British Pound',
+    'JPY' => 'Japanese Yen',
+    'CHF' => 'Swiss Franc',
+  );
+
+  $attributes['Country'] = array(
+    'US' => 'United States of America',
+    'AD' => 'Andorra',
+    'AE' => 'United Arab Emirates',
+    'AF' => 'Afghanistan',
+    'AG' => 'Antigua and Barbuda',
+    'AI' => 'Anguilla',
+    'AL' => 'Albania',
+    'AM' => 'Armenia',
+    'AN' => 'Netherlands Antilles',
+    'AO' => 'Angola',
+    'AR' => 'Argentina',
+    'AS' => 'American Samoa',
+    'AT' => 'Austria',
+    'AU' => 'Australia',
+    'AW' => 'Aruba',
+    'AX' => 'Åland Islands',
+    'AZ' => 'Azerbaijan',
+    'BA' => 'Bosnia and Herzegovina',
+    'BB' => 'Barbados',
+    'BD' => 'Bangladesh',
+    'BE' => 'Belgium',
+    'BF' => 'Burkina Faso',
+    'BG' => 'Bulgaria',
+    'BH' => 'Bahrain',
+    'BI' => 'Burundi',
+    'BJ' => 'Benin',
+    'BL' => 'Saint-Barthélemy',
+    'BM' => 'Bermuda',
+    'BN' => 'Brunei Darussalam',
+    'BO' => 'Bolivia',
+    'BR' => 'Brazil',
+    'BS' => 'Bahamas',
+    'BT' => 'Bhutan',
+    'BW' => 'Botswana',
+    'BY' => 'Belarus',
+    'BZ' => 'Belize',
+    'CA' => 'Canada',
+    'CD' => 'Democratic Republic of the Congo',
+    'CF' => 'Central African Republic',
+    'CG' => 'Congo',
+    'CH' => 'Switzerland',
+    'CI' => "Côte d'Ivoire",
+    'CK' => 'Cook Islands',
+    'CL' => 'Chile',
+    'CM' => 'Cameroon',
+    'CN' => 'China',
+    'CO' => 'Colombia',
+    'CR' => 'Costa Rica',
+    'CU' => 'Cuba',
+    'CV' => 'Cape Verde',
+    'CY' => 'Cyprus',
+    'CZ' => 'Czech Republic',
+    'DE' => 'Germany',
+    'DJ' => 'Djibouti',
+    'DK' => 'Denmark',
+    'DM' => 'Dominica',
+    'DO' => 'Dominican Republic',
+    'DZ' => 'Algeria',
+    'EC' => 'Ecuador',
+    'EE' => 'Estonia',
+    'EG' => 'Egypt',
+    'EH' => 'Western Sahara',
+    'ER' => 'Eritrea',
+    'ES' => 'Spain',
+    'ET' => 'Ethiopia',
+    'FI' => 'Finland',
+    'FJ' => 'Fiji',
+    'FK' => 'Falkland Islands (Malvinas)',
+    'FM' => 'Micronesia, Federated States of',
+    'FO' => 'Faeroe Islands',
+    'FR' => 'France',
+    'GA' => 'Gabon',
+    'GB' => 'United Kingdom',
+    'GD' => 'Grenada',
+    'GE' => 'Georgia',
+    'GF' => 'French Guiana',
+    'GG' => 'Guernsey',
+    'GH' => 'Ghana',
+    'GI' => 'Gibraltar',
+    'GL' => 'Greenland',
+    'GM' => 'Gambia',
+    'GN' => 'Guinea',
+    'GP' => 'Guadeloupe',
+    'GQ' => 'Equatorial Guinea',
+    'GR' => 'Greece',
+    'GT' => 'Guatemala',
+    'GU' => 'Guam',
+    'GW' => 'Guinea-Bissau',
+    'GY' => 'Guyana',
+    'HK' => 'Hong Kong Special Administrative Region of China',
+    'HN' => 'Honduras',
+    'HR' => 'Croatia',
+    'HT' => 'Haiti',
+    'HU' => 'Hungary',
+    'ID' => 'Indonesia',
+    'IE' => 'Ireland',
+    'IL' => 'Israel',
+    'IM' => 'Isle of Man',
+    'IN' => 'India',
+    'IQ' => 'Iraq, Republic of',
+    'IR' => 'Iran, Islamic Republic of',
+    'IS' => 'Iceland',
+    'IT' => 'Italy',
+    'JE' => 'Jersey',
+    'JM' => 'Jamaica',
+    'JO' => 'Jordan',
+    'JP' => 'Japan',
+    'KE' => 'Kenya',
+    'KG' => 'Kyrgyzstan',
+    'KH' => 'Cambodia',
+    'KI' => 'Kiribati',
+    'KM' => 'Comoros',
+    'KN' => 'Saint Kitts and Nevis',
+    'KP' => "Democratic People's Republic of Korea",
+    'KR' => 'Republic of Korea',
+    'KW' => 'Kuwait',
+    'KY' => 'Cayman Islands',
+    'KZ' => 'Kazakhstan',
+    'LA' => "Lao People's Democratic Republic",
+    'LB' => 'Lebanon',
+    'LC' => 'Saint Lucia',
+    'LI' => 'Liechtenstein',
+    'LK' => 'Sri Lanka',
+    'LR' => 'Liberia',
+    'LS' => 'Lesotho',
+    'LT' => 'Lithuania',
+    'LU' => 'Luxembourg',
+    'LV' => 'Latvia',
+    'LY' => 'Libyan Arab Jamahiriya',
+    'MA' => 'Morocco',
+    'MC' => 'Monaco',
+    'MD' => 'Moldova',
+    'ME' => 'Montenegro',
+    'MF' => 'Saint-Martin (French part)',
+    'MG' => 'Madagascar',
+    'MH' => 'Marshall Islands',
+    'MK' => 'The former Yugoslav Republic of Macedonia',
+    'ML' => 'Mali',
+    'MM' => 'Myanmar',
+    'MN' => 'Mongolia',
+    'MO' => 'Macao Special Administrative Region of China',
+    'MP' => 'Northern Mariana Islands',
+    'MQ' => 'Martinique',
+    'MR' => 'Mauritania',
+    'MS' => 'Montserrat',
+    'MT' => 'Malta',
+    'MU' => 'Mauritius',
+    'MV' => 'Maldives',
+    'MW' => 'Malawi',
+    'MX' => 'Mexico',
+    'MY' => 'Malaysia',
+    'MZ' => 'Mozambique',
+    'NA' => 'Namibia',
+    'NC' => 'New Caledonia',
+    'NE' => 'Niger',
+    'NF' => 'Norfolk Island',
+    'NG' => 'Nigeria',
+    'NI' => 'Nicaragua',
+    'NL' => 'Netherlands',
+    'NO' => 'Norway',
+    'NP' => 'Nepal',
+    'NR' => 'Nauru',
+    'NU' => 'Niue',
+    'NZ' => 'New Zealand',
+    'OM' => 'Oman',
+    'PA' => 'Panama',
+    'PE' => 'Peru',
+    'PF' => 'French Polynesia',
+    'PG' => 'Papua New Guinea',
+    'PH' => 'Philippines',
+    'PK' => 'Pakistan',
+    'PL' => 'Poland',
+    'PM' => 'Saint Pierre and Miquelon',
+    'PN' => 'Pitcairn',
+    'PR' => 'Puerto Rico',
+    'PS' => 'Occupied Palestinian Territory',
+    'PT' => 'Portugal',
+    'PW' => 'Palau',
+    'PY' => 'Paraguay',
+    'QA' => 'Qatar',
+    'RE' => 'Réunion',
+    'RO' => 'Romania',
+    'RS' => 'Serbia',
+    'RU' => 'Russian Federation',
+    'RW' => 'Rwanda',
+    'SA' => 'Saudi Arabia',
+    'SB' => 'Solomon Islands',
+    'SC' => 'Seychelles',
+    'SD' => 'Sudan',
+    'SE' => 'Sweden',
+    'SG' => 'Singapore',
+    'SH' => 'Saint Helena',
+    'SI' => 'Slovenia',
+    'SJ' => 'Svalbard and Jan Mayen Islands',
+    'SK' => 'Slovakia',
+    'SL' => 'Sierra Leone',
+    'SM' => 'San Marino',
+    'SN' => 'Senegal',
+    'SO' => 'Somalia',
+    'SR' => 'Suriname',
+    'ST' => 'Sao Tome and Principe',
+    'SV' => 'El Salvador',
+    'SY' => 'Syrian Arab Republic',
+    'SZ' => 'Swaziland',
+    'TC' => 'Turks and Caicos Islands',
+    'TD' => 'Chad',
+    'TG' => 'Togo',
+    'TH' => 'Thailand',
+    'TJ' => 'Tajikistan',
+    'TK' => 'Tokelau',
+    'TL' => 'Timor-Leste',
+    'TM' => 'Turkmenistan',
+    'TN' => 'Tunisia',
+    'TO' => 'Tonga',
+    'TR' => 'Turkey',
+    'TT' => 'Trinidad and Tobago',
+    'TV' => 'Tuvalu',
+    'TZ' => 'United Republic of Tanzania',
+    'UA' => 'Ukraine',
+    'UG' => 'Uganda',
+    'UY' => 'Uruguay',
+    'UZ' => 'Uzbekistan',
+    'VA' => 'Holy See',
+    'VC' => 'Saint Vincent and the Grenadines',
+    'VE' => 'Venezuela (Bolivarian Republic of)',
+    'VG' => 'British Virgin Islands',
+    'VI' => 'United States Virgin Islands',
+    'VN' => 'Viet Nam',
+    'VU' => 'Vanuatu',
+    'WF' => 'Wallis and Futuna Islands',
+    'WS' => 'Samoa',
+    'YE' => 'Yemen',
+    'YT' => 'Mayotte',
+    'ZA' => 'South Africa',
+    'ZM' => 'Zambia',
+    'ZW' => 'Zimbabwe',
+  );
+
+  $s = "INSERT INTO {stormattribute} (domain, akey, avalue, weight) VALUES ('%s', '%s', '%s', %d)";
+  $prevdomain = '';
+  $weight = 0;
+  foreach ($attributes as $domain => $attribute) {
+    if ($domain != $prevdomain) $weight=0;
+    foreach ($attribute as $key => $value) {
+      db_query($s, $domain, $key, $value, $weight);
+      $weight++;
+    }
+    $prevdomain = $domain;
+  }
+}
+
+function stormorganization_disable() {
+  drupal_set_message(t('Nodes of type "Organization" have not been deleted on disabling Storm Organization. Please note that they will now have reduced functionality, and will not be protected by Storm Organization access controls.'), 'warning');
+}
+
+function stormorganization_uninstall() {
+  drupal_uninstall_schema('stormorganization');
+
+  db_query($s = "DELETE FROM {stormattribute} WHERE domain IN ('Price mode', 'Currency', 'Country')");
+}
+
+function stormorganization_schema() {
+  $schema['stormorganization'] = array(
+    'fields'        => array(
+      'vid'         => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'nid'         => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'prefix'      => array('type' => 'varchar', 'length' => 100),
+      'fullname'    => array('type' => 'varchar', 'length' => 100),
+      'country'     => array('type' => 'varchar', 'length' => 100),
+      'orglanguage' => array('type' => 'varchar', 'length' => 100),
+      'provstate'   => array('type' => 'varchar', 'length' => 50),
+      'city'        => array('type' => 'varchar', 'length' => 100),
+      'zip'         => array('type' => 'varchar', 'length' => 10),
+      'address'     => array('type' => 'varchar', 'length' => 100),
+      'taxid'       => array('type' => 'varchar', 'length' => 50),
+      'email'       => array('type' => 'varchar', 'length' => 50),
+      'www'         => array('type' => 'varchar', 'length' => 100),
+      'phone'       => array('type' => 'varchar', 'length' => 100),
+      'currency'    => array('type' => 'varchar', 'length' => 100),
+      'iscustomer'  => array('type' => 'int', 'default' => 1),
+      'isprovider'  => array('type' => 'int', 'default' => 0),
+      'isactive'    => array('type' => 'int', 'default' => 1),
+      'pricemode'   => array('type' => 'varchar', 'length' => 20),
+      'price'       => array('type' => 'float'),
+    ),
+    'primary key' => array('vid'),
+    'indexes' => array(
+      'nid'     => array('nid')
+    ),
+  );
+
+  return $schema;
+}
+
+function stormorganization_update_1() {
+  $ret = array();
+  db_add_field($ret, 'stormorganization', 'iscustomer', array('type' => 'int', 'default' => 1));
+  db_add_field($ret, 'stormorganization', 'isprovider', array('type' => 'int', 'default' => 0));
+  db_add_field($ret, 'stormorganization', 'isactive', array('type' => 'int', 'default' => 1));
+  return $ret;
+}
+
+function stormorganization_update_2() {
+  $ret = array();
+  db_change_field($ret, 'stormorganization', 'vatid', 'taxid', array('type' => 'varchar', 'length' => 50));
+  return $ret;
+}
+
+function stormorganization_update_3() {
+  $ret = array();
+  db_query('UPDATE {stormorganization} SET iscustomer=1, isprovider=1, isactive=1');
+  return $ret;
+}
+
+function stormorganization_update_6104() {
+  $ret = array();
+  db_add_field($ret, 'stormorganization', 'pricemode', array('type' => 'varchar', 'length' => 20));
+  db_add_field($ret, 'stormorganization', 'price', array('type' => 'float'));
+  return $ret;
+}
+
+/*
+ * @function
+ * Database update for issue #899970
+ */
+function stormorganization_update_6105() {
+  $ret = array();
+
+  db_change_field($ret, 'stormorganization', 'orglanguage', 'orglanguage', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormorganization', 'currency', 'currency', array('type' => 'varchar', 'length' => 100));
+  db_change_field($ret, 'stormorganization', 'pricemode', 'pricemode', array('type' => 'varchar', 'length' => 100));
+
+  return $ret;
+}
+
+/**
+ * Improve primary keys and indexes
+ */
+function stormorganization_update_6201() {
+  $return = array();
+  db_drop_primary_key($return, 'stormorganization');
+  db_add_primary_key($return, 'stormorganization', array('vid'));
+  db_add_index($return, 'stormorganization', 'nid', array('nid'));
+  return $return;
+}
+
+/**
+ * Move Storm Attribute module into component modules
+ */
+function stormorganization_update_6202() {
+  // Only run this update if was not previously run as part of the legacy stormattribute module
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 2) {
+    $attributes['Currency'] = array(
+      'USD' => 'US Dollar',
+      'CAD' => 'Canadian Dollar',
+      'EUR' => 'Euro',
+      'GBP' => 'British Pound',
+      'JPY' => 'Japanese Yen',
+      'CHF' => 'Swiss Franc',
+    );
+
+    $attributes['Country'] = array(
+      'AD' => 'Andorra',
+      'AE' => 'United Arab Emirates',
+      'AF' => 'Afghanistan',
+      'AG' => 'Antigua and Barbuda',
+      'AI' => 'Anguilla',
+      'AL' => 'Albania',
+      'AM' => 'Armenia',
+      'AN' => 'Netherlands Antilles',
+      'AO' => 'Angola',
+      'AR' => 'Argentina',
+      'AS' => 'American Samoa',
+      'AT' => 'Austria',
+      'AU' => 'Australia',
+      'AW' => 'Aruba',
+      'AX' => 'Åland Islands',
+      'AZ' => 'Azerbaijan',
+      'BA' => 'Bosnia and Herzegovina',
+      'BB' => 'Barbados',
+      'BD' => 'Bangladesh',
+      'BE' => 'Belgium',
+      'BF' => 'Burkina Faso',
+      'BG' => 'Bulgaria',
+      'BH' => 'Bahrain',
+      'BI' => 'Burundi',
+      'BJ' => 'Benin',
+      'BL' => 'Saint-Barthélemy',
+      'BM' => 'Bermuda',
+      'BN' => 'Brunei Darussalam',
+      'BO' => 'Bolivia',
+      'BR' => 'Brazil',
+      'BS' => 'Bahamas',
+      'BT' => 'Bhutan',
+      'BW' => 'Botswana',
+      'BY' => 'Belarus',
+      'BZ' => 'Belize',
+      'CA' => 'Canada',
+      'CD' => 'Democratic Republic of the Congo',
+      'CF' => 'Central African Republic',
+      'CG' => 'Congo',
+      'CH' => 'Switzerland',
+      'CI' => "Côte d'Ivoire",
+      'CK' => 'Cook Islands',
+      'CL' => 'Chile',
+      'CM' => 'Cameroon',
+      'CN' => 'China',
+      'CO' => 'Colombia',
+      'CR' => 'Costa Rica',
+      'CU' => 'Cuba',
+      'CV' => 'Cape Verde',
+      'CY' => 'Cyprus',
+      'CZ' => 'Czech Republic',
+      'DE' => 'Germany',
+      'DJ' => 'Djibouti',
+      'DK' => 'Denmark',
+      'DM' => 'Dominica',
+      'DO' => 'Dominican Republic',
+      'DZ' => 'Algeria',
+      'EC' => 'Ecuador',
+      'EE' => 'Estonia',
+      'EG' => 'Egypt',
+      'EH' => 'Western Sahara',
+      'ER' => 'Eritrea',
+      'ES' => 'Spain',
+      'ET' => 'Ethiopia',
+      'FI' => 'Finland',
+      'FJ' => 'Fiji',
+      'FK' => 'Falkland Islands (Malvinas)',
+      'FM' => 'Micronesia, Federated States of',
+      'FO' => 'Faeroe Islands',
+      'FR' => 'France',
+      'GA' => 'Gabon',
+      'GB' => 'United Kingdom of Great Britain and Northern Ireland',
+      'GD' => 'Grenada',
+      'GE' => 'Georgia',
+      'GF' => 'French Guiana',
+      'GG' => 'Guernsey',
+      'GH' => 'Ghana',
+      'GI' => 'Gibraltar',
+      'GL' => 'Greenland',
+      'GM' => 'Gambia',
+      'GN' => 'Guinea',
+      'GP' => 'Guadeloupe',
+      'GQ' => 'Equatorial Guinea',
+      'GR' => 'Greece',
+      'GT' => 'Guatemala',
+      'GU' => 'Guam',
+      'GW' => 'Guinea-Bissau',
+      'GY' => 'Guyana',
+      'HK' => 'Hong Kong Special Administrative Region of China',
+      'HN' => 'Honduras',
+      'HR' => 'Croatia',
+      'HT' => 'Haiti',
+      'HU' => 'Hungary',
+      'ID' => 'Indonesia',
+      'IE' => 'Ireland',
+      'IL' => 'Israel',
+      'IM' => 'Isle of Man',
+      'IN' => 'India',
+      'IQ' => 'Iraq, Republic of',
+      'IR' => 'Iran, Islamic Republic of',
+      'IS' => 'Iceland',
+      'IT' => 'Italy',
+      'JE' => 'Jersey',
+      'JM' => 'Jamaica',
+      'JO' => 'Jordan',
+      'JP' => 'Japan',
+      'KE' => 'Kenya',
+      'KG' => 'Kyrgyzstan',
+      'KH' => 'Cambodia',
+      'KI' => 'Kiribati',
+      'KM' => 'Comoros',
+      'KN' => 'Saint Kitts and Nevis',
+      'KP' => "Democratic People's Republic of Korea",
+      'KR' => 'Republic of Korea',
+      'KW' => 'Kuwait',
+      'KY' => 'Cayman Islands',
+      'KZ' => 'Kazakhstan',
+      'LA' => "Lao People's Democratic Republic",
+      'LB' => 'Lebanon',
+      'LC' => 'Saint Lucia',
+      'LI' => 'Liechtenstein',
+      'LK' => 'Sri Lanka',
+      'LR' => 'Liberia',
+      'LS' => 'Lesotho',
+      'LT' => 'Lithuania',
+      'LU' => 'Luxembourg',
+      'LV' => 'Latvia',
+      'LY' => 'Libyan Arab Jamahiriya',
+      'MA' => 'Morocco',
+      'MC' => 'Monaco',
+      'MD' => 'Moldova',
+      'ME' => 'Montenegro',
+      'MF' => 'Saint-Martin (French part)',
+      'MG' => 'Madagascar',
+      'MH' => 'Marshall Islands',
+      'MK' => 'The former Yugoslav Republic of Macedonia',
+      'ML' => 'Mali',
+      'MM' => 'Myanmar',
+      'MN' => 'Mongolia',
+      'MO' => 'Macao Special Administrative Region of China',
+      'MP' => 'Northern Mariana Islands',
+      'MQ' => 'Martinique',
+      'MR' => 'Mauritania',
+      'MS' => 'Montserrat',
+      'MT' => 'Malta',
+      'MU' => 'Mauritius',
+      'MV' => 'Maldives',
+      'MW' => 'Malawi',
+      'MX' => 'Mexico',
+      'MY' => 'Malaysia',
+      'MZ' => 'Mozambique',
+      'NA' => 'Namibia',
+      'NC' => 'New Caledonia',
+      'NE' => 'Niger',
+      'NF' => 'Norfolk Island',
+      'NG' => 'Nigeria',
+      'NI' => 'Nicaragua',
+      'NL' => 'Netherlands',
+      'NO' => 'Norway',
+      'NP' => 'Nepal',
+      'NR' => 'Nauru',
+      'NU' => 'Niue',
+      'NZ' => 'New Zealand',
+      'OM' => 'Oman',
+      'PA' => 'Panama',
+      'PE' => 'Peru',
+      'PF' => 'French Polynesia',
+      'PG' => 'Papua New Guinea',
+      'PH' => 'Philippines',
+      'PK' => 'Pakistan',
+      'PL' => 'Poland',
+      'PM' => 'Saint Pierre and Miquelon',
+      'PN' => 'Pitcairn',
+      'PR' => 'Puerto Rico',
+      'PS' => 'Occupied Palestinian Territory',
+      'PT' => 'Portugal',
+      'PW' => 'Palau',
+      'PY' => 'Paraguay',
+      'QA' => 'Qatar',
+      'RE' => 'Réunion',
+      'RO' => 'Romania',
+      'RS' => 'Serbia',
+      'RU' => 'Russian Federation',
+      'RW' => 'Rwanda',
+      'SA' => 'Saudi Arabia',
+      'SB' => 'Solomon Islands',
+      'SC' => 'Seychelles',
+      'SD' => 'Sudan',
+      'SE' => 'Sweden',
+      'SG' => 'Singapore',
+      'SH' => 'Saint Helena',
+      'SI' => 'Slovenia',
+      'SJ' => 'Svalbard and Jan Mayen Islands',
+      'SK' => 'Slovakia',
+      'SL' => 'Sierra Leone',
+      'SM' => 'San Marino',
+      'SN' => 'Senegal',
+      'SO' => 'Somalia',
+      'SR' => 'Suriname',
+      'ST' => 'Sao Tome and Principe',
+      'SV' => 'El Salvador',
+      'SY' => 'Syrian Arab Republic',
+      'SZ' => 'Swaziland',
+      'TC' => 'Turks and Caicos Islands',
+      'TD' => 'Chad',
+      'TG' => 'Togo',
+      'TH' => 'Thailand',
+      'TJ' => 'Tajikistan',
+      'TK' => 'Tokelau',
+      'TL' => 'Timor-Leste',
+      'TM' => 'Turkmenistan',
+      'TN' => 'Tunisia',
+      'TO' => 'Tonga',
+      'TR' => 'Turkey',
+      'TT' => 'Trinidad and Tobago',
+      'TV' => 'Tuvalu',
+      'TZ' => 'United Republic of Tanzania',
+      'UA' => 'Ukraine',
+      'UG' => 'Uganda',
+      'UY' => 'Uruguay',
+      'US' => 'United States of America',
+      'UZ' => 'Uzbekistan',
+      'VA' => 'Holy See',
+      'VC' => 'Saint Vincent and the Grenadines',
+      'VE' => 'Venezuela (Bolivarian Republic of)',
+      'VG' => 'British Virgin Islands',
+      'VI' => 'United States Virgin Islands',
+      'VN' => 'Viet Nam',
+      'VU' => 'Vanuatu',
+      'WF' => 'Wallis and Futuna Islands',
+      'WS' => 'Samoa',
+      'YE' => 'Yemen',
+      'YT' => 'Mayotte',
+      'ZA' => 'South Africa',
+      'ZM' => 'Zambia',
+      'ZW' => 'Zimbabwe',
+    );
+    $s = "INSERT INTO {stormattribute} (domain, akey, avalue, weight) VALUES ('%s', '%s', '%s', %d)";
+    $prevdomain = '';
+    $weight = 0;
+    foreach ($attributes as $domain => $attribute) {
+      if ($domain != $prevdomain) $weight=0;
+      foreach ($attribute as $key => $value) {
+        db_query($s, $domain, $key, $value, $weight);
+        $weight++;
+      }
+      $prevdomain = $domain;
+    }
+  }
+
+  $ret = array();
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 6110) {
+    $ret[] = update_sql("INSERT INTO {stormattribute} (domain, akey, avalue, weight, isactive) VALUES ('Price mode', 'not applicable', 'Not Applicable', 0, 1)");
+  }
+
+  if (db_result(db_query("SELECT schema_version FROM {system} WHERE name = 'stormattribute'")) < 6112) {
+    $ret[] = update_sql("INSERT INTO {stormattribute} (domain, akey, avalue, weight, isactive) VALUES ('Price mode', 'fixed_price', 'Fixed Price', 0, 1)");
+    $ret[] = update_sql("UPDATE {stormorganization} set pricemode='fixed_price' where pricemode='fixed_timetracking'");
+    $ret[] = update_sql("DELETE FROM {stormattribute} where domain = 'Price mode' and akey = 'fixed_timetracking'");
+  }
+
+  return $ret;
+}

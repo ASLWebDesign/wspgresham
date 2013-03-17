@@ -1,0 +1,338 @@
+<?php
+/**
+ * @file
+ * Test definitions for the Storm Task module
+ */
+class StormtaskTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Storm Task Functionality'),
+      'description' => t('Test the functionality of the Storm Task module'),
+      'group' => 'Storm',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('storm', 'stormorganization', 'stormproject', 'stormtask', 'stormperson', 'stormteam');
+  }
+
+  public function testStormtaskAccess() {
+    $this->drupalGet('storm/tasks');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Tasks list for anonymous user'));
+
+    $basic_user = $this->drupalCreateUser();
+    $this->drupalLogin($basic_user);
+    $this->drupalGet('storm/tasks');
+    $this->assertResponse(403, t('Make sure access is denied to Storm Tasks list for basic user'));
+
+    $privileged_user = $this->drupalCreateUser(array('Storm task: access'));
+    $this->drupalLogin($privileged_user);
+    $this->drupalGet('storm/tasks');
+    $this->assertText(t('Tasks'), t('Make sure the correct page has been displayed by checking that the title is "Tasks".'));
+  }
+
+  public function testStormtaskCreate() {
+    // Create and login user
+    $user = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm project: add', 'Storm project: view all', 'Storm task: add', 'Storm task: view all'));
+    $this->drupalLogin($user);
+
+    // Create organization and invoice
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => '1',
+    );
+    $task = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $this->drupalPost('node/add/stormtask', $task, t('Save'));
+
+    $this->assertText(t('Task @title has been created.', array('@title' => $task['title'])));;
+  }
+
+  public function testStormtaskList() {
+    // Create and login user
+    $userAll = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm task: access', 'Storm task: add', 'Storm task: view all', 'Storm task: edit all', 'Storm task: delete all', 'Storm person: add', 'Storm team: add', 'Storm person: view all', 'Storm team: view all', 'Storm project: add', 'Storm project: view all'));
+    $userOrg = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm task: access', 'Storm task: add', 'Storm task: view of user organization', 'Storm task: edit of user organization', 'Storm task: delete of user organization'));
+    $userOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm task: access', 'Storm task: add', 'Storm task: view own', 'Storm task: edit own', 'Storm task: delete own', 'Storm project: view all'));
+    $userAssigned = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm task: access', 'Storm task: add', 'Storm task: view if assigned to task', 'Storm task: edit if assigned to task', 'Storm task: delete if assigned to task'));
+    $userAssignedTeam = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm task: access', 'Storm task: add', 'Storm task: view if assigned to task', 'Storm task: edit if assigned to task', 'Storm task: delete if assigned to task'));
+    $userViewAllEditOwn = $this->drupalCreateUser(array('Storm organization: add', 'Storm organization: view all', 'Storm task: access', 'Storm task: add', 'Storm task: view all', 'Storm task: edit own', 'Storm task: delete own', 'Storm project: view all'));
+
+    $this->drupalLogin($userAll);
+
+    // Create organization
+    $org = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org, t('Save'));
+    $org = node_load(array('title' => $org['title']));
+
+    $org2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormorganization', $org2, t('Save'));
+    $org2 = node_load(array('title' => $org2['title']));
+
+    // Create stormperson with organization to userOrg
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userOrg->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userAssigned->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+    $assignedPerson = node_load(array('title' => $personOrg['title']));
+
+    $personOrg = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'user_name' => $userAssignedTeam->name,
+    );
+    $this->drupalPost('node/add/stormperson', $personOrg, t('Save'));
+    $assignedPersonTeam = node_load(array('title' => $personOrg['title']));
+
+    $team = array(
+      'title' => $this->randomName(32),
+      'members_array_1' => $assignedPersonTeam->nid,
+    );
+    $this->drupalPost('node/add/stormteam', $team, t('Save'));
+    $team = node_load(array('title' => $team['title']));
+
+    // Create project foreach organization
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $projectOrg = node_load(array('title' => $prj['title']));
+
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org->nid,
+      'assigned_nid' => $team->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $projectTeam = node_load(array('title' => $prj['title']));
+
+    $prj = array(
+      'title' => $this->randomName(32),
+      'organization_nid' => $org2->nid,
+      'assigned_nid' => $team->nid,
+    );
+    $this->drupalPost('node/add/stormproject', $prj, t('Save'));
+    $projectOrg2 = node_load(array('title' => $prj['title']));
+
+    // Create tasks
+    $task1 = array(
+      'organization_nid' => $org->nid,
+      'project_nid' => $projectOrg->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+    );
+    $this->drupalPost('node/add/stormtask', $task1, t('Save'), array('query' => 'organization_nid='.$org->nid));
+    $task1 = node_load(array('title' => $task1['title']));
+
+    $taskAssigned = array(
+      'organization_nid' => $org->nid,
+      'project_nid' => $projectOrg->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'assigned_nid' => $assignedPerson->nid,
+    );
+    $this->drupalPost('node/add/stormtask', $taskAssigned, t('Save'), array('query' => 'organization_nid='.$org->nid.'&project_nid='.$projectOrg->nid));
+    $taskAssigned = node_load(array('title' => $taskAssigned['title']));
+
+    $taskAssignedTeam = array(
+      'organization_nid' => $org->nid,
+      'project_nid' => $projectTeam->nid,
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'assigned_nid' => $team->nid,
+    );
+    $this->drupalPost('node/add/stormtask', $taskAssignedTeam, t('Save'), array('query' => 'organization_nid='.$org->nid.'&project_nid='.$projectTeam->nid));
+    $taskAssignedTeam = node_load(array('title' => $taskAssignedTeam['title']));
+
+    $this->drupalLogin($userOwn);
+    $task2 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org->nid,
+      'project_nid' => $projectOrg->nid,
+    );
+    $this->drupalPost('node/add/stormtask', $task2, t('Save'), array('query' => 'organization_nid='.$org->nid));
+    $task2 = node_load(array('title' => $task2['title']));
+
+    $this->drupalLogin($userViewAllEditOwn);
+    $task3 = array(
+      'title' => $this->randomName(32),
+      'body' => $this->randomName(64),
+      'organization_nid' => $org2->nid,
+      'project_nid' => $projectOrg2->nid,
+    );
+    $this->drupalPost('node/add/stormtask', $task3, t('Save'), array('query' => 'organization_nid='.$org2->nid));
+    $task3 = node_load(array('title' => $task3['title']));
+
+    // Test for 'Storm task: view all'
+    $this->drupalLogin($userAll);
+    $this->drupalGet('storm/tasks');
+
+    $this->assertLink($task1->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $task1->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $task1->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertLink($task2->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $task2->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $task2->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertLink($task3->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $task3->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $task3->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertLink($taskAssigned->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $taskAssigned->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $taskAssigned->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertLink($taskAssignedTeam->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $taskAssignedTeam->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $taskAssignedTeam->nid .'/delete', 'The Task delete icon appears on the list');
+
+    // Test for 'Storm task: view of user organization'
+    $this->drupalLogin($userOrg);
+    $this->drupalGet('storm/tasks');
+
+    $this->assertLink($task1->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $task1->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $task1->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertLink($task2->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $task2->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $task2->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertNoLink($task3->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task3->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task3->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertLink($taskAssigned->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $taskAssigned->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $taskAssigned->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertLink($taskAssignedTeam->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $taskAssignedTeam->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $taskAssignedTeam->nid .'/delete', 'The Task delete icon appears on the list');
+
+    // Test for 'Storm task: view own'
+    $this->drupalLogin($userOwn);
+    $this->drupalGet('storm/tasks');
+
+    $this->assertNoLink($task1->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task1->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task1->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertLink($task2->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $task2->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $task2->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertNoLink($task3->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task3->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task3->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertNoLink($taskAssigned->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssigned->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssigned->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertNoLink($taskAssignedTeam->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssignedTeam->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssignedTeam->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    // Test for 'Storm task: view all', 'Storm task: edit own'
+    $this->drupalLogin($userViewAllEditOwn);
+    $this->drupalGet('storm/tasks');
+
+    $this->assertLink($task1->title, 0, 'The Task appears on the list');
+    $this->assertNoRaw('node/'. $task1->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task1->nid .'/delete', 'The Task edit icon does not appear on the list');
+
+    $this->assertLink($task2->title, 0, 'The Task appears on the list');
+    $this->assertNoRaw('node/'. $task2->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task2->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertLink($task3->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $task3->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $task3->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertLink($taskAssigned->title, 0, 'The Task appears on the list');
+    $this->assertNoRaw('node/'. $taskAssigned->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssigned->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertLink($taskAssignedTeam->title, 0, 'The Task appears on the list');
+    $this->assertNoRaw('node/'. $taskAssignedTeam->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssignedTeam->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    // Test for 'Storm task: view if assigned to task'
+    $this->drupalLogin($userAssigned);
+    $this->drupalGet('storm/tasks');
+
+    $this->assertNoLink($task1->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task1->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task1->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertNoLink($task2->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task2->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task2->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertNoLink($task3->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task3->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task3->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertLink($taskAssigned->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $taskAssigned->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $taskAssigned->nid .'/delete', 'The Task delete icon appears on the list');
+
+    $this->assertNoLink($taskAssignedTeam->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssignedTeam->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssignedTeam->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    // Test for 'Storm task: view if assigned to task' (using team)
+    $this->drupalLogin($userAssignedTeam);
+    $this->drupalGet('storm/tasks');
+
+    $this->assertNoLink($task1->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task1->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task1->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertNoLink($task2->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task2->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task2->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertNoLink($task3->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $task3->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $task3->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertNoLink($taskAssigned->title, 'The Task does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssigned->nid .'/edit', 'The Task edit icon does not appear on the list');
+    $this->assertNoRaw('node/'. $taskAssigned->nid .'/delete', 'The Task delete icon does not appear on the list');
+
+    $this->assertLink($taskAssignedTeam->title, 0, 'The Task appears on the list');
+    $this->assertRaw('node/'. $taskAssignedTeam->nid .'/edit', 'The Task edit icon appears on the list');
+    $this->assertRaw('node/'. $taskAssignedTeam->nid .'/delete', 'The Task delete icon appears on the list');
+  }
+}
